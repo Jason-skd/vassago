@@ -1,0 +1,66 @@
+[project]
+name = "vassago"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Jason-skd", email = "wintor76111@gmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = []
+
+[build-system]
+requires = ["uv_build>=0.10.11,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "ruff>=0.15.6",
+]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.ruff.lint]
+select = [
+    "ALL",  # 启用全部规则，再逐条排除不需要的
+]
+ignore = [
+    "T20",    # flake8-print — 允许 print
+    "ERA",    # eradicate — 允许注释掉的代码
+    "FIX",    # fixme comments
+    "TD",     # todo comments
+    "COM812", # trailing comma — 从 select 移除以消除 formatter 警告
+    "D203",   # 与 D211 冲突, 保留 D211(类前无空行)
+    "D213",   # 与 D212 冲突, 保留 D212(多行 docstring 摘要在首行)
+]
+extend-select = [
+    "COM812", # 重新启用尾随逗号规则
+]
+
+[tool.ruff.lint.isort]
+force-single-line = true
+
+[tool.ruff.lint.pylint]
+max-args = 8
+
+[tool.ruff.lint.per-file-ignores]
+# 测试文件: 允许 assert, 魔法数字, 省略类型注解, 允许访问私有成员
+"tests/**/*.py" = [
+    "S101",    # assert
+    "PLR2004", # magic value
+    "ANN",     # 类型注解
+    "SLF001",  # 私有成员访问
+    "D",       # docstring
+    "PT006",   # pytest parametrize 名称格式
+    "ARG001",  # 未使用参数(fixture)
+    "PLC0415", # 函数内 import(测试隔离用)
+    "TRY301",  # raise 抽象(测试中直接 raise 是正常的)
+    "EM101",   # 异常字符串字面量(测试中可接受)
+    "TRY003",  # 异常消息(测试中可接受)
+    "FBT001",  # bool 位置参数(参数化测试)
+    "DTZ011",  # date.today()(测试中可接受)
+    "B015",    # 无意义比较(测试 __contains__ 时的写法)
+    "E501",    # 行过长(测试注释)
+]
