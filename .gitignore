@@ -379,3 +379,6 @@ $RECYCLE.BIN/
 # Temp folders
 tmp/
 temp/
+
+# Claude code
+.claude/
