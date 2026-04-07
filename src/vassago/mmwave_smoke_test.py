@@ -223,23 +223,27 @@ class MmwavePacketParser:
 
         for _ in range(num_tlvs):
             if offset + TLV_HEADER_SIZE > total_packet_length:
-                return None
+                break
 
-            tlv_type, tlv_length = struct.unpack_from(
+            # 提取类型和“纯净重”(Payload Length)
+            tlv_type, tlv_payload_length = struct.unpack_from(
                 TLV_HEADER_FORMAT,
                 packet_bytes,
                 offset,
             )
-            if tlv_length < TLV_HEADER_SIZE:
-                return None
-            if offset + tlv_length > total_packet_length:
-                return None
+            
+            # 核心修复：真实跨度 = 皮重 (8) + 净重 (Payload)
+            tlv_total_size = TLV_HEADER_SIZE + tlv_payload_length
+            
+            if offset + tlv_total_size > total_packet_length:
+                break
 
             tlv_types.append(tlv_type)
-            offset += tlv_length
+            
+            # 按真实跨度向后移动指针
+            offset += tlv_total_size
 
         return tuple(tlv_types)
-
 
 def build_argument_parser() -> argparse.ArgumentParser:
     """Create the command-line interface."""
@@ -476,6 +480,14 @@ def run_smoke_test(
             chunk = connection.read(read_size)
             if not chunk:
                 continue
+
+            # --- 新增的血液化验代码 ---
+            if bytes_read == 0 and len(chunk) > 30:
+                print("\n" + "="*50)
+                print("🚨 抓取到第一帧底层二进制流 (HEX DUMP) 🚨")
+                print(chunk[:128].hex())
+                print("="*50 + "\n")
+            # --------------------------
 
             bytes_read += len(chunk)
             new_packets = parser.feed(chunk)
