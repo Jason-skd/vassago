@@ -7,10 +7,12 @@ authors = [
     { name = "Jason-skd", email = "wintor76111@gmail.com" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "pyserial>=3.5",
+]
 
 [build-system]
-requires = ["uv_build>=0.10.11,<0.11.0"]
+requires = ["uv_build>=0.11.3,<0.12.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
