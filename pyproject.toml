@@ -14,6 +14,9 @@ dependencies = [
     "typer>=0.24.1",
 ]
 
+[project.scripts]
+vassago = "vassago.cli:run"
+
 [build-system]
 requires = ["uv_build>=0.11.6,<0.12.0"]
 build-backend = "uv_build"
@@ -52,6 +55,11 @@ force-single-line = true
 max-args = 8
 
 [tool.ruff.lint.per-file-ignores]
+# Typer command signatures naturally use bool defaults for option flags.
+"src/vassago/firmware/mmwave/cli.py" = [
+    "FBT002",
+]
+
 # 测试文件: 允许 assert, 魔法数字, 省略类型注解, 允许访问私有成员
 "tests/**/*.py" = [
     "S101",    # assert
