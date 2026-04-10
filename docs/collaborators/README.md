@@ -1,0 +1,41 @@
+# 协作者文档说明
+
+`docs/collaborators/` 面向项目协作者，而不是仓库维护者。
+
+这里的目标是让协作者在不了解全部代码实现细节的情况下，仍然可以按照统一规范完成协作任务。
+
+## 适合放在这里的内容
+
+- 采集操作手册
+- 标注规范
+- 设备连接与检查清单
+- 会议纪要
+- 数据提交规范
+- 与协作流程直接相关的注意事项
+
+## 不适合放在这里的内容
+
+- 代码架构讨论
+- 依赖选型理由
+- 仓库重构设计
+- commit 粒度与开发工作流规范
+- 需要贴着具体版本回溯的技术上下文
+
+这些内容应放到：
+
+- [docs/dev/README.md](/Users/skd/Documents/vscode-projects/vassago/docs/dev/README.md)
+- [docs/dev/context/README.md](/Users/skd/Documents/vscode-projects/vassago/docs/dev/context/README.md)
+
+## 子目录
+
+- [tutorials/README.md](/Users/skd/Documents/vscode-projects/vassago/docs/collaborators/tutorials/README.md)
+  面向协作者的操作教程与 SOP。
+- [meetings/README.md](/Users/skd/Documents/vscode-projects/vassago/docs/collaborators/meetings/README.md)
+  会议纪要与协作讨论记录。
+
+## 写作要求
+
+- 优先写清楚步骤、前提、风险和验收标准
+- 尽量少写实现细节
+- 命令、目录、输入输出示例要尽量完整
+- 面向执行者，而不是面向代码作者
