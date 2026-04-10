@@ -29,6 +29,10 @@ Vassago 是一个面向高精度、高鲁棒性微动手势边缘 AI 识别的�
 
 ## Required Reading Before Editing
 
+如果你是 Codex 或其他 AI coding agent，那么每次新建对话、并准备在这个仓库里开展工作时，都应自主先阅读
+[docs/dev/tutorials/development-workflow.md](/Users/skd/Documents/vscode-projects/vassago/docs/dev/tutorials/development-workflow.md)，
+不要等用户额外提醒。
+
 如果你是 AI coding agent 或开发者，并且准备修改以下内容：
 
 - 仓库结构
