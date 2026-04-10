@@ -10,3 +10,8 @@
 - 标注流程
 
 这里不保存开发工作流，也不保存仓库结构决策。
+
+## 当前文档
+
+- [mmwave_smoke_test.md](/Users/skd/Documents/vscode-projects/vassago/docs/collaborators/tutorials/mmwave_smoke_test.md)
+  mmWave 板卡 `smoke-test` 的简明操作手册。
