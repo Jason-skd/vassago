@@ -1,0 +1,15 @@
+pre-commit:
+  commands:
+    format:
+      glob: "*.py"
+      run: uv run ruff format {staged_files}
+      stage_fixed: true
+
+    lint:
+      glob: "*.py"
+      run: uv run ruff check --fix {staged_files}
+      stage_fixed: true
+
+    test:
+      glob: "*.py"
+      run: uv run pytest --testmon {staged_files} || [ $? -eq 5 ]  # 5 是 pytest 在没有测试文件时返回的退出代码
