@@ -59,6 +59,9 @@ max-args = 8
 "src/vassago/firmware/mmwave/cli.py" = [
     "FBT002",
 ]
+"src/vassago/collection/rd/cli.py" = [
+    "FBT002",
+]
 
 # 测试文件: 允许 assert, 魔法数字, 省略类型注解, 允许访问私有成员
 "tests/**/*.py" = [
