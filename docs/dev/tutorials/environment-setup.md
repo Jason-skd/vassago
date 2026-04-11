@@ -17,6 +17,7 @@
 | 同步开发依赖 | `uv sync --dev` |
 | 查看项目 Python 版本 | `uv run python --version` |
 | 运行 lint | `uv run ruff check .` |
+| 运行类型检查 | `uv run pyright` |
 | 自动格式化 | `uv run ruff format .` |
 | 检查格式是否符合要求 | `uv run ruff format --check .` |
 | 运行全部测试 | `uv run pytest` |
@@ -50,6 +51,7 @@ UV_CACHE_DIR=/tmp/uv-cache lefthook run pre-commit
 - 开发依赖通过 `pyproject.toml` 中的 `dev` dependency group 管理
 - 当前已配置开发工具：
   - `ruff`
+  - `pyright`
   - `pytest`
   - `pytest-testmon`
   - `lefthook`
@@ -195,14 +197,18 @@ lefthook install
 
 - `uv run ruff format {staged_files}`
 - `uv run ruff check --fix {staged_files}`
-- `uv run pytest --testmon {staged_files} || [ $? -eq 5 ]`
+- `uv run pyright`
+- `uv run pytest --testmon || [ $? -eq 5 ]`
 
 这里的行为可以概括为：
 
 - 对暂存区中的 Python 文件做自动格式化
 - 对暂存区中的 Python 文件执行 lint，并自动修复可修复问题
-- 使用 `pytest-testmon` 只运行受改动影响的测试
+- 对整个项目执行一次 `pyright` 类型检查，确保命令行结果与 VS Code Pylance 基本对齐
+- 对整个项目调用一次 `pytest-testmon`，由 `testmon` 自己选择受改动影响的测试
 - 如果当前仓库还没有测试、`pytest` 返回退出码 `5`，hook 不会因此阻塞提交
+
+这里特意没有把 `ruff format` 和 `ruff check --fix` 改成全仓执行，因为它们会直接修改文件。提交前只处理暂存区中的 Python 文件，可以避免顺手改动未提交主题之外的文件。
 
 如果你想在提交前手动演练一次 hook，可以执行：
 
@@ -230,19 +236,27 @@ uv run python --version
 uv run ruff check .
 ```
 
-### 7.3 检查代码格式
+### 7.3 运行类型检查
+
+```bash
+uv run pyright
+```
+
+这条命令应尽量与 VS Code 中的 Pylance 检查结果保持一致。如果编辑器里出现新的类型错误，优先确认 `uv run pyright` 是否也能复现。
+
+### 7.4 检查代码格式
 
 ```bash
 uv run ruff format --check .
 ```
 
-### 7.4 运行测试
+### 7.5 运行测试
 
 ```bash
 uv run pytest
 ```
 
-### 7.5 验证 testmon 链路
+### 7.6 验证 testmon 链路
 
 ```bash
 uv run pytest --testmon
@@ -307,12 +321,12 @@ uv run pytest --no-testmon
 当前仓库的 `pre-commit` 已经集成：
 
 ```bash
-uv run pytest --testmon {staged_files} || [ $? -eq 5 ]
+uv run pytest --testmon || [ $? -eq 5 ]
 ```
 
 这意味着：
 
-- 日常提交默认会优先跑受改动影响的测试
+- 日常提交默认会调用一次全局 `pytest --testmon`，再由 `testmon` 选择受改动影响的测试
 - 在仓库测试尚少的早期阶段，即使没有测试文件，也不会让提交失败
 
 ## 9. VS Code 推荐配置

@@ -10,6 +10,10 @@ pre-commit:
       run: uv run ruff check --fix {staged_files}
       stage_fixed: true
 
+    typecheck:
+      glob: "*.py"
+      run: uv run pyright
+
     test:
       glob: "*.py"
-      run: uv run pytest --testmon {staged_files} || [ $? -eq 5 ]  # 5 是 pytest 在没有测试文件时返回的退出代码
+      run: uv run pytest --testmon || [ $? -eq 5 ]  # 5 是 pytest 在没有测试文件时返回的退出代码
