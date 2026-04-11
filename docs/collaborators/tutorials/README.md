@@ -16,4 +16,4 @@
 - [mmwave_smoke_test.md](/Users/skd/Documents/vscode-projects/vassago/docs/collaborators/tutorials/mmwave_smoke_test.md)
   mmWave 板卡 `smoke-test` 的简明操作手册。
 - [rd_collection.md](/Users/skd/Documents/vscode-projects/vassago/docs/collaborators/tutorials/rd_collection.md)
-  RD `collection` 的简明操作手册。
+  RD `collection` 的简明操作手册，覆盖 session 创建、恢复采集、固定倒计时 `GO`、结束键打点与 quick QC。
