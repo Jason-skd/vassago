@@ -1,7 +1,7 @@
+schema_version = "collection_rd_profile_v2"
 config_id = "rd_phase1_default"
 label = "RD Phase 1 Default"
 description = "Default RD collection profile for the current UART-first workflow."
-capture_duration_s = 5.0
 batch_size = 12
 
 [firmware]
@@ -13,87 +13,15 @@ hand = "right"
 distance_m = 0.5
 angle_deg = 0.0
 environment = "office_lab"
-operator_name = "operator_a"
 radar_id = "rd_aop_01"
 firmware_id = "rd_phase1_uart"
 
-[serial]
-cli_baudrate = 115200
-data_baudrate = 921600
-
 [options]
 gestures = ["swipe_left", "swipe_right", "push", "pull"]
-speeds = ["slow", "normal", "fast"]
 environments = ["office_lab", "meeting_room", "hallway"]
 
-[[target_windows]]
-gesture = "swipe_left"
-speed = "slow"
-start_s = 1.4
-end_s = 3.2
-
-[[target_windows]]
-gesture = "swipe_left"
-speed = "normal"
-start_s = 1.2
-end_s = 2.8
-
-[[target_windows]]
-gesture = "swipe_left"
-speed = "fast"
-start_s = 1.0
-end_s = 2.4
-
-[[target_windows]]
-gesture = "swipe_right"
-speed = "slow"
-start_s = 1.4
-end_s = 3.2
-
-[[target_windows]]
-gesture = "swipe_right"
-speed = "normal"
-start_s = 1.2
-end_s = 2.8
-
-[[target_windows]]
-gesture = "swipe_right"
-speed = "fast"
-start_s = 1.0
-end_s = 2.4
-
-[[target_windows]]
-gesture = "push"
-speed = "slow"
-start_s = 1.6
-end_s = 3.4
-
-[[target_windows]]
-gesture = "push"
-speed = "normal"
-start_s = 1.3
-end_s = 2.9
-
-[[target_windows]]
-gesture = "push"
-speed = "fast"
-start_s = 1.1
-end_s = 2.5
-
-[[target_windows]]
-gesture = "pull"
-speed = "slow"
-start_s = 1.6
-end_s = 3.4
-
-[[target_windows]]
-gesture = "pull"
-speed = "normal"
-start_s = 1.3
-end_s = 2.9
-
-[[target_windows]]
-gesture = "pull"
-speed = "fast"
-start_s = 1.1
-end_s = 2.5
+[gesture_target_durations]
+swipe_left = 1.6
+swipe_right = 1.6
+push = 1.8
+pull = 1.8

@@ -7,29 +7,33 @@ def test_get_collection_profile_loads_sample_config() -> None:
     profile = collection_config.get_collection_profile("rd_phase1_default")
 
     assert profile.config_id == "rd_phase1_default"
-    assert profile.capture_duration_s == 5.0
-    assert profile.batch_size == 12
+    assert profile.capture_window_duration_s == 5.0
+    assert profile.countdown_duration_s == 5.0
+    assert profile.marked_window_end_grace_s == 0.25
+    assert profile.end_mark_key == "space"
     assert profile.firmware_config_path.name == "rd_phase1_uart.cfg"
-    assert profile.target_window_for(
-        gesture="swipe_left",
-        speed="normal",
-    ) == collection_config.WindowRange(start_s=1.2, end_s=2.8)
+    assert profile.target_window_duration_for(gesture="swipe_left") == 1.6
 
 
 def test_collection_profile_snapshot_carries_full_effective_config() -> None:
     profile = collection_config.get_collection_profile("rd_phase1_default")
 
     snapshot = profile.as_snapshot()
+    runtime = snapshot["runtime"]
     serial = snapshot["serial"]
-    target_windows = snapshot["target_windows"]
+    gesture_target_durations = snapshot["gesture_target_durations"]
 
+    assert isinstance(runtime, dict)
     assert isinstance(serial, dict)
-    assert isinstance(target_windows, list)
+    assert isinstance(gesture_target_durations, dict)
 
     assert snapshot["config_id"] == "rd_phase1_default"
+    assert snapshot["global_source_path"] == "rd.toml"
     assert snapshot["firmware"] == {
         "config_id": "rd_candidate",
         "config_path": "configs/rd_phase1_uart.cfg",
     }
+    assert runtime["capture_window_duration_s"] == 5.0
+    assert runtime["countdown_duration_s"] == 5.0
     assert serial["data_baudrate"] == 921_600
-    assert len(target_windows) == 12
+    assert gesture_target_durations["push"] == 1.8

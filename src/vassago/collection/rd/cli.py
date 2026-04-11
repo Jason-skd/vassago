@@ -97,10 +97,6 @@ def handle_init_session(  # noqa: PLR0913
         str | None,
         typer.Option(help="Gesture selected from the collection profile."),
     ] = None,
-    speed: Annotated[
-        str | None,
-        typer.Option(help="Speed selected from the collection profile."),
-    ] = None,
     cli_port: Annotated[
         str | None,
         typer.Option(help="CLI UART port."),
@@ -141,12 +137,6 @@ def handle_init_session(  # noqa: PLR0913
     )
     selected_gesture = _resolve_gesture(
         gesture=gesture,
-        profile=profile,
-        interactive=resolved_interactive,
-    )
-    selected_speed = _resolve_speed(
-        speed=speed,
-        gesture=selected_gesture,
         profile=profile,
         interactive=resolved_interactive,
     )
@@ -213,7 +203,6 @@ def handle_init_session(  # noqa: PLR0913
             message="firmware_id",
         ),
         gesture=selected_gesture,
-        speed=selected_speed,
         cli_port=selected_cli_port,
         data_port=selected_data_port,
         data_baudrate=data_baudrate or profile.serial.data_baudrate,
@@ -341,31 +330,6 @@ def _resolve_gesture(
         )
 
     msg = "Pass --gesture or enable interactive mode."
-    raise typer.BadParameter(msg)
-
-
-def _resolve_speed(
-    *,
-    speed: str | None,
-    gesture: str,
-    profile: collection_config.CollectionProfile,
-    interactive: bool,
-) -> str:
-    """Resolve speed from args or interactive selection."""
-    available_speeds = profile.speeds_for_gesture(gesture)
-    if speed is not None:
-        if speed not in available_speeds:
-            msg = f"Unknown speed {speed!r} for gesture {gesture!r}."
-            raise typer.BadParameter(msg)
-        return speed
-
-    if interactive:
-        return collection_ui.prompt_for_choice(
-            message="Choose speed",
-            choices=available_speeds,
-        )
-
-    msg = "Pass --speed or enable interactive mode."
     raise typer.BadParameter(msg)
 
 

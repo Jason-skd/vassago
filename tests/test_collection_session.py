@@ -20,7 +20,6 @@ def test_initialize_session_persists_manifest_with_config_snapshot(tmp_path) -> 
             radar_id="radar_01",
             firmware_id="fw_01",
             gesture="swipe_left",
-            speed="normal",
             cli_port="/dev/cli",
             data_port="/dev/data",
             data_baudrate=921_600,
@@ -43,14 +42,9 @@ def test_initialize_session_persists_manifest_with_config_snapshot(tmp_path) -> 
     assert loaded_manifest["subject_name"] == "alice"
     assert loaded_manifest["config_id"] == "rd_phase1_default"
     assert firmware["config_path"] == "configs/rd_phase1_uart.cfg"
-    assert first_take["capture_window"] == {
-        "start_s": 0.0,
-        "end_s": 5.0,
-    }
-    assert first_take["target_window"] == {
-        "start_s": 1.2,
-        "end_s": 2.8,
-    }
+    assert first_take["capture_window"] is None
+    assert first_take["target_window"] is None
+    assert first_take["marked_window"] is None
 
 
 def test_list_unfinished_sessions_returns_pending_manifest(tmp_path) -> None:
@@ -68,7 +62,6 @@ def test_list_unfinished_sessions_returns_pending_manifest(tmp_path) -> None:
             radar_id="radar_01",
             firmware_id="fw_01",
             gesture="swipe_left",
-            speed="normal",
             cli_port="/dev/cli",
             data_port="/dev/data",
             data_baudrate=921_600,
@@ -80,4 +73,5 @@ def test_list_unfinished_sessions_returns_pending_manifest(tmp_path) -> None:
 
     assert len(summaries) == 1
     assert summaries[0].subject_name == "alice"
+    assert summaries[0].gesture == "swipe_left"
     assert summaries[0].remaining_take_count == 12

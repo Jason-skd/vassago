@@ -1,0 +1,46 @@
+# Example round profile for one RD collection campaign.
+#
+# Merge intent:
+# - Repository root `rd.toml` provides stable baseline defaults.
+# - This round profile defines business logic for the current campaign.
+# - A checker may allow overriding some global fields here and emit WARNs.
+
+schema_version = "collection_rd_profile_v2_draft"
+config_id = "rd_round_template"
+label = "RD Round Template"
+description = "Example round profile for one RD collection campaign."
+batch_size = 12
+
+# Optional overrides for repository-level defaults.
+# A future checker can warn when these diverge from `rd.toml`.
+# capture_window_duration_s = 5.0
+# countdown_duration_s = 5.0
+# marked_window_end_grace_s = 0.30
+# end_mark_key = "space"
+
+# Optional serial overrides.
+# [serial]
+# cli_baudrate = 115200
+# data_baudrate = 921600
+
+[firmware]
+config_id = "rd_candidate"
+config_path = "configs/rd_phase1_uart.cfg"
+
+[defaults]
+hand = "right"
+distance_m = 0.5
+angle_deg = 0.0
+environment = "office_lab"
+radar_id = "rd_aop_01"
+firmware_id = "rd_phase1_uart"
+
+[options]
+gestures = ["swipe_left", "swipe_right", "push", "pull"]
+environments = ["office_lab", "meeting_room", "hallway"]
+
+[gesture_target_durations]
+swipe_left = 1.6
+swipe_right = 1.6
+push = 1.8
+pull = 1.8

@@ -1,0 +1,16 @@
+# Global RD collection baseline for this repository.
+#
+# This file is intended to hold only low-level, stable defaults that almost
+# never change between collection rounds. Round-specific business logic should
+# stay in one round profile TOML instead of being centralized here.
+
+schema_version = "collection_rd_global_v1_draft"
+capture_window_duration_s = 5.0
+countdown_duration_s = 5.0
+marked_window_end_grace_s = 0.25
+end_mark_key = "space"
+
+[serial]
+cli_baudrate = 115200
+data_baudrate = 921600
+

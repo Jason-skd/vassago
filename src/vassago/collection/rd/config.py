@@ -10,17 +10,21 @@ from typing import Any
 from vassago.collection.rd.paths import resolve_repo_path
 from vassago.collection.rd.paths import to_repo_relative_path
 
-CONFIG_SCHEMA_VERSION = "collection_rd_config_v1"
+CONFIG_SCHEMA_VERSION = "collection_rd_config_v2"
 DEFAULT_BATCH_SIZE = 20
-DEFAULT_CAPTURE_DURATION_SECONDS = 5.0
+DEFAULT_CAPTURE_WINDOW_DURATION_SECONDS = 5.0
+DEFAULT_COUNTDOWN_DURATION_SECONDS = 5.0
+DEFAULT_MARKED_WINDOW_END_GRACE_SECONDS = 0.25
+DEFAULT_END_MARK_KEY = "space"
 DEFAULT_CLI_BAUDRATE = 115_200
 DEFAULT_DATA_BAUDRATE = 921_600
 DEFAULT_COLLECTION_CONFIGS_ROOT = Path("configs/collection/rd")
+DEFAULT_GLOBAL_CONFIG_PATH = Path("rd.toml")
 
 
 @dataclass(slots=True, frozen=True)
 class WindowRange:
-    """One relative window inside the fixed 5-second capture."""
+    """One relative window inside a fixed raw capture."""
 
     start_s: float
     end_s: float
@@ -41,7 +45,6 @@ class CollectionDefaults:
     distance_m: float | None
     angle_deg: float | None
     environment: str
-    operator_name: str
     radar_id: str
     firmware_id: str
 
@@ -52,7 +55,6 @@ class CollectionDefaults:
             "distance_m": self.distance_m,
             "angle_deg": self.angle_deg,
             "environment": self.environment,
-            "operator_name": self.operator_name,
             "radar_id": self.radar_id,
             "firmware_id": self.firmware_id,
         }
@@ -78,20 +80,15 @@ class CollectionSerialDefaults:
 
 
 @dataclass(slots=True, frozen=True)
-class CollectionTargetWindow:
-    """One gesture + speed mapping to a target window."""
+class GestureTargetDuration:
+    """Configured target-window duration for one gesture."""
 
     gesture: str
-    speed: str
-    window: WindowRange
+    target_window_duration_s: float
 
-    def as_dict(self) -> dict[str, object]:
-        """Convert the mapping to a JSON-ready mapping."""
-        return {
-            "gesture": self.gesture,
-            "speed": self.speed,
-            **self.window.as_dict(),
-        }
+    def as_pair(self) -> tuple[str, float]:
+        """Convert the duration mapping to one key/value pair."""
+        return self.gesture, self.target_window_duration_s
 
 
 @dataclass(slots=True, frozen=True)
@@ -102,47 +99,49 @@ class CollectionProfile:
     path: Path
     label: str
     description: str
-    capture_duration_s: float
     batch_size: int
     firmware_config_id: str
     firmware_config_path: Path
     defaults: CollectionDefaults
     serial: CollectionSerialDefaults
     gestures: tuple[str, ...]
-    speeds: tuple[str, ...]
     environments: tuple[str, ...]
-    target_windows: tuple[CollectionTargetWindow, ...]
+    gesture_target_durations: tuple[GestureTargetDuration, ...]
+    capture_window_duration_s: float
+    countdown_duration_s: float
+    marked_window_end_grace_s: float
+    end_mark_key: str
+    global_path: Path | None = None
 
-    def speeds_for_gesture(self, gesture: str) -> tuple[str, ...]:
-        """Return the configured speeds supported by one gesture."""
-        return tuple(
-            target_window.speed
-            for target_window in self.target_windows
-            if target_window.gesture == gesture
-        )
+    @property
+    def capture_duration_s(self) -> float:
+        """Compatibility alias for callers that still say capture_duration."""
+        return self.capture_window_duration_s
 
-    def target_window_for(self, *, gesture: str, speed: str) -> WindowRange:
-        """Resolve the configured target window for one gesture + speed pair."""
-        for target_window in self.target_windows:
-            if target_window.gesture == gesture and target_window.speed == speed:
-                return target_window.window
+    def target_window_duration_for(self, *, gesture: str) -> float:
+        """Resolve the configured target-window duration for one gesture."""
+        for target_duration in self.gesture_target_durations:
+            if target_duration.gesture == gesture:
+                return target_duration.target_window_duration_s
 
-        msg = (
-            "Target window is not defined for "
-            f"gesture={gesture!r}, speed={speed!r} in {self.path}"
-        )
+        msg = f"Target-window duration is not defined for gesture={gesture!r}."
         raise KeyError(msg)
 
     def as_snapshot(self) -> dict[str, object]:
         """Build the manifest snapshot for this profile."""
-        return {
+        snapshot: dict[str, object] = {
             "schema_version": CONFIG_SCHEMA_VERSION,
             "config_id": self.config_id,
             "source_path": to_repo_relative_path(self.path),
             "label": self.label,
             "description": self.description,
-            "capture_duration_s": self.capture_duration_s,
             "batch_size": self.batch_size,
+            "runtime": {
+                "capture_window_duration_s": self.capture_window_duration_s,
+                "countdown_duration_s": self.countdown_duration_s,
+                "marked_window_end_grace_s": self.marked_window_end_grace_s,
+                "end_mark_key": self.end_mark_key,
+            },
             "firmware": {
                 "config_id": self.firmware_config_id,
                 "config_path": to_repo_relative_path(self.firmware_config_path),
@@ -151,13 +150,15 @@ class CollectionProfile:
             "serial": self.serial.as_dict(),
             "options": {
                 "gestures": list(self.gestures),
-                "speeds": list(self.speeds),
                 "environments": list(self.environments),
             },
-            "target_windows": [
-                target_window.as_dict() for target_window in self.target_windows
-            ],
+            "gesture_target_durations": dict(
+                item.as_pair() for item in self.gesture_target_durations
+            ),
         }
+        if self.global_path is not None:
+            snapshot["global_source_path"] = to_repo_relative_path(self.global_path)
+        return snapshot
 
 
 def list_collection_profiles(
@@ -191,26 +192,50 @@ def get_collection_profile(
 def load_collection_profile(path: Path) -> CollectionProfile:
     """Load and validate one RD collection profile from TOML."""
     resolved_path = resolve_repo_path(path)
-    with resolved_path.open("rb") as handle:
-        data = tomllib.load(handle)
+    data = _load_toml_file(resolved_path)
+    global_path, global_data = _load_global_data()
 
-    config_id, label, description, capture_duration_s, batch_size = _load_scalars(
+    config_id, label, description, batch_size = _load_scalars(
         data,
         resolved_path=resolved_path,
     )
     firmware_config_id, firmware_config_path = _load_firmware_binding(data)
+    capture_window_duration_s = _load_capture_window_duration_s(
+        data,
+        global_data=global_data,
+        resolved_path=resolved_path,
+    )
+    countdown_duration_s = _load_countdown_duration_s(
+        data,
+        global_data=global_data,
+        resolved_path=resolved_path,
+    )
+    marked_window_end_grace_s = _load_marked_window_end_grace_s(
+        data,
+        global_data=global_data,
+        resolved_path=resolved_path,
+    )
+    end_mark_key = _load_end_mark_key(
+        data,
+        global_data=global_data,
+        resolved_path=resolved_path,
+    )
     defaults = _load_defaults(data, resolved_path=resolved_path)
-    serial = _load_serial_defaults(data)
-    gestures, speeds, environments = _load_options(
+    serial = _load_serial_defaults(
+        profile_data=data,
+        global_data=global_data,
+    )
+    gestures, environments = _load_options(
         data,
         defaults=defaults,
         resolved_path=resolved_path,
     )
-    target_windows = _load_target_windows(
+    gesture_target_durations = _load_gesture_target_durations(
         data,
         gestures=gestures,
-        speeds=speeds,
-        capture_duration_s=capture_duration_s,
+        capture_window_duration_s=capture_window_duration_s,
+        countdown_duration_s=countdown_duration_s,
+        marked_window_end_grace_s=marked_window_end_grace_s,
         resolved_path=resolved_path,
     )
 
@@ -219,46 +244,130 @@ def load_collection_profile(path: Path) -> CollectionProfile:
         path=resolved_path,
         label=label,
         description=description,
-        capture_duration_s=capture_duration_s,
         batch_size=batch_size,
         firmware_config_id=firmware_config_id,
         firmware_config_path=firmware_config_path,
         defaults=defaults,
         serial=serial,
         gestures=gestures,
-        speeds=speeds,
         environments=environments,
-        target_windows=tuple(target_windows),
+        gesture_target_durations=gesture_target_durations,
+        capture_window_duration_s=capture_window_duration_s,
+        countdown_duration_s=countdown_duration_s,
+        marked_window_end_grace_s=marked_window_end_grace_s,
+        end_mark_key=end_mark_key,
+        global_path=global_path,
     )
+
+
+def _load_toml_file(path: Path) -> dict[str, Any]:
+    """Load one TOML file into a dictionary."""
+    with path.open("rb") as handle:
+        data = tomllib.load(handle)
+    if not isinstance(data, dict):
+        msg = f"TOML root must be a table: {path}"
+        raise TypeError(msg)
+    return data
+
+
+def _load_global_data() -> tuple[Path | None, dict[str, Any]]:
+    """Load the repository-level RD baseline when available."""
+    resolved_path = resolve_repo_path(DEFAULT_GLOBAL_CONFIG_PATH)
+    if not resolved_path.exists():
+        return None, {}
+    return resolved_path, _load_toml_file(resolved_path)
 
 
 def _load_scalars(
     data: dict[str, Any],
     *,
     resolved_path: Path,
-) -> tuple[str, str, str, float, int]:
+) -> tuple[str, str, str, int]:
     """Load the top-level scalar fields from one profile."""
     config_id = _require_str(data, "config_id")
     label = _require_str(data, "label")
     description = _require_str(data, "description")
-    capture_duration_s = _require_float(
-        data,
-        "capture_duration_s",
-        default=DEFAULT_CAPTURE_DURATION_SECONDS,
-    )
-    if capture_duration_s != DEFAULT_CAPTURE_DURATION_SECONDS:
-        msg = (
-            "RD collection currently requires capture_duration_s to be exactly "
-            f"{DEFAULT_CAPTURE_DURATION_SECONDS:g}s in {resolved_path}"
-        )
-        raise ValueError(msg)
-
     batch_size = _require_int(data, "batch_size", default=DEFAULT_BATCH_SIZE)
     if batch_size <= 0:
         msg = f"batch_size must be positive in {resolved_path}"
         raise ValueError(msg)
+    return config_id, label, description, batch_size
 
-    return config_id, label, description, capture_duration_s, batch_size
+
+def _load_capture_window_duration_s(
+    data: dict[str, Any],
+    *,
+    global_data: dict[str, Any],
+    resolved_path: Path,
+) -> float:
+    """Load capture-window duration from profile, global config, or default."""
+    duration_s = _resolve_float(
+        profile_data=data,
+        global_data=global_data,
+        key="capture_window_duration_s",
+        default=DEFAULT_CAPTURE_WINDOW_DURATION_SECONDS,
+    )
+    if duration_s <= 0:
+        msg = f"capture_window_duration_s must be positive in {resolved_path}"
+        raise ValueError(msg)
+    return duration_s
+
+
+def _load_countdown_duration_s(
+    data: dict[str, Any],
+    *,
+    global_data: dict[str, Any],
+    resolved_path: Path,
+) -> float:
+    """Load countdown duration from profile, global config, or default."""
+    duration_s = _resolve_float(
+        profile_data=data,
+        global_data=global_data,
+        key="countdown_duration_s",
+        default=DEFAULT_COUNTDOWN_DURATION_SECONDS,
+    )
+    if duration_s <= 0:
+        msg = f"countdown_duration_s must be positive in {resolved_path}"
+        raise ValueError(msg)
+    return duration_s
+
+
+def _load_marked_window_end_grace_s(
+    data: dict[str, Any],
+    *,
+    global_data: dict[str, Any],
+    resolved_path: Path,
+) -> float:
+    """Load marked-window grace from profile, global config, or default."""
+    grace_s = _resolve_float(
+        profile_data=data,
+        global_data=global_data,
+        key="marked_window_end_grace_s",
+        default=DEFAULT_MARKED_WINDOW_END_GRACE_SECONDS,
+    )
+    if grace_s < 0:
+        msg = f"marked_window_end_grace_s must be >= 0 in {resolved_path}"
+        raise ValueError(msg)
+    return grace_s
+
+
+def _load_end_mark_key(
+    data: dict[str, Any],
+    *,
+    global_data: dict[str, Any],
+    resolved_path: Path,
+) -> str:
+    """Load the configured capture end-mark key."""
+    end_mark_key = _resolve_str(
+        profile_data=data,
+        global_data=global_data,
+        key="end_mark_key",
+        default=DEFAULT_END_MARK_KEY,
+    )
+    if not end_mark_key:
+        msg = f"end_mark_key must be non-empty in {resolved_path}"
+        raise ValueError(msg)
+    return end_mark_key
 
 
 def _load_firmware_binding(
@@ -285,7 +394,6 @@ def _load_defaults(
         distance_m=_optional_float(defaults_table.get("distance_m")),
         angle_deg=_optional_float(defaults_table.get("angle_deg")),
         environment=_require_str(defaults_table, "environment"),
-        operator_name=_require_str(defaults_table, "operator_name"),
         radar_id=_require_str(defaults_table, "radar_id"),
         firmware_id=_require_str(defaults_table, "firmware_id"),
     )
@@ -295,20 +403,35 @@ def _load_defaults(
     return defaults
 
 
-def _load_serial_defaults(data: dict[str, Any]) -> CollectionSerialDefaults:
-    """Load the serial strategy from one profile."""
-    serial_table = _require_table(data, "serial")
+def _load_serial_defaults(
+    *,
+    profile_data: dict[str, Any],
+    global_data: dict[str, Any],
+) -> CollectionSerialDefaults:
+    """Load the serial strategy from the merged global/profile view."""
+    profile_serial = _optional_table(profile_data.get("serial"))
+    global_serial = _optional_table(global_data.get("serial"))
     return CollectionSerialDefaults(
-        cli_port=_optional_str(serial_table.get("cli_port")),
-        data_port=_optional_str(serial_table.get("data_port")),
-        cli_baudrate=_require_int(
-            serial_table,
-            "cli_baudrate",
+        cli_port=_resolve_optional_str_from_tables(
+            profile_table=profile_serial,
+            global_table=global_serial,
+            key="cli_port",
+        ),
+        data_port=_resolve_optional_str_from_tables(
+            profile_table=profile_serial,
+            global_table=global_serial,
+            key="data_port",
+        ),
+        cli_baudrate=_resolve_int_from_tables(
+            profile_table=profile_serial,
+            global_table=global_serial,
+            key="cli_baudrate",
             default=DEFAULT_CLI_BAUDRATE,
         ),
-        data_baudrate=_require_int(
-            serial_table,
-            "data_baudrate",
+        data_baudrate=_resolve_int_from_tables(
+            profile_table=profile_serial,
+            global_table=global_serial,
+            key="data_baudrate",
             default=DEFAULT_DATA_BAUDRATE,
         ),
     )
@@ -319,11 +442,10 @@ def _load_options(
     *,
     defaults: CollectionDefaults,
     resolved_path: Path,
-) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
-    """Load gestures, speeds, and environments from one profile."""
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Load gestures and environments from one profile."""
     options_table = _require_table(data, "options")
     gestures = _require_str_tuple(options_table, "gestures")
-    speeds = _require_str_tuple(options_table, "speeds")
     environments = _require_str_tuple(options_table, "environments")
 
     if defaults.environment not in environments:
@@ -333,97 +455,153 @@ def _load_options(
         )
         raise ValueError(msg)
 
-    return gestures, speeds, environments
+    return gestures, environments
 
 
-def _load_target_windows(
+def _load_gesture_target_durations(
     data: dict[str, Any],
     *,
     gestures: tuple[str, ...],
-    speeds: tuple[str, ...],
-    capture_duration_s: float,
+    capture_window_duration_s: float,
+    countdown_duration_s: float,
+    marked_window_end_grace_s: float,
     resolved_path: Path,
-) -> list[CollectionTargetWindow]:
-    """Load gesture + speed window mappings from one profile."""
-    raw_target_windows = data.get("target_windows")
-    if not isinstance(raw_target_windows, list) or not raw_target_windows:
-        msg = f"target_windows must be a non-empty TOML array in {resolved_path}"
+) -> tuple[GestureTargetDuration, ...]:
+    """Load gesture -> target-window duration mappings from one profile."""
+    durations_table = _require_table(data, "gesture_target_durations")
+    unexpected_gestures = sorted(
+        key for key in durations_table if key not in set(gestures)
+    )
+    if unexpected_gestures:
+        msg = (
+            "gesture_target_durations contains unknown gestures "
+            f"{unexpected_gestures!r} in {resolved_path}"
+        )
         raise ValueError(msg)
 
-    seen_pairs: set[tuple[str, str]] = set()
-    return [
-        _parse_target_window(
-            item,
-            gestures=gestures,
-            speeds=speeds,
-            capture_duration_s=capture_duration_s,
-            seen_pairs=seen_pairs,
+    target_durations: list[GestureTargetDuration] = []
+    for gesture in gestures:
+        target_duration_s = _require_float(durations_table, gesture)
+        _validate_target_window_duration(
+            gesture=gesture,
+            target_window_duration_s=target_duration_s,
+            capture_window_duration_s=capture_window_duration_s,
+            countdown_duration_s=countdown_duration_s,
+            marked_window_end_grace_s=marked_window_end_grace_s,
             resolved_path=resolved_path,
         )
-        for item in raw_target_windows
-    ]
+        target_durations.append(
+            GestureTargetDuration(
+                gesture=gesture,
+                target_window_duration_s=target_duration_s,
+            ),
+        )
+
+    return tuple(target_durations)
 
 
-def _parse_target_window(
-    item: object,
+def _validate_target_window_duration(
     *,
-    gestures: tuple[str, ...],
-    speeds: tuple[str, ...],
-    capture_duration_s: float,
-    seen_pairs: set[tuple[str, str]],
+    gesture: str,
+    target_window_duration_s: float,
+    capture_window_duration_s: float,
+    countdown_duration_s: float,
+    marked_window_end_grace_s: float,
     resolved_path: Path,
-) -> CollectionTargetWindow:
-    """Parse and validate one target window table."""
-    if not isinstance(item, dict):
-        msg = f"target_windows entries must be tables in {resolved_path}"
-        raise TypeError(msg)
-
-    gesture = _require_str(item, "gesture")
-    speed = _require_str(item, "speed")
-    if gesture not in gestures:
-        msg = f"Unknown gesture {gesture!r} in {resolved_path}"
-        raise ValueError(msg)
-    if speed not in speeds:
-        msg = f"Unknown speed {speed!r} in {resolved_path}"
-        raise ValueError(msg)
-
-    pair = (gesture, speed)
-    if pair in seen_pairs:
-        msg = f"Duplicate target window for {pair!r} in {resolved_path}"
-        raise ValueError(msg)
-    seen_pairs.add(pair)
-
-    window = WindowRange(
-        start_s=_require_float(item, "start_s"),
-        end_s=_require_float(item, "end_s"),
-    )
-    _validate_window(
-        window,
-        capture_duration_s=capture_duration_s,
-        path=resolved_path,
-        label=f"target_windows[{gesture}/{speed}]",
-    )
-    return CollectionTargetWindow(
-        gesture=gesture,
-        speed=speed,
-        window=window,
-    )
-
-
-def _validate_window(
-    window: WindowRange,
-    *,
-    capture_duration_s: float,
-    path: Path,
-    label: str,
 ) -> None:
-    """Validate one configured window against the fixed capture duration."""
-    if window.start_s < 0 or window.end_s > capture_duration_s:
-        msg = f"{label} must stay inside 0..{capture_duration_s:g}s in {path}"
+    """Validate one target-window duration against the runtime geometry."""
+    if target_window_duration_s <= 0:
+        msg = (
+            "gesture_target_durations values must be positive for "
+            f"{gesture!r} in {resolved_path}"
+        )
         raise ValueError(msg)
-    if window.start_s >= window.end_s:
-        msg = f"{label} must satisfy start_s < end_s in {path}"
+
+    latest_target_end_s = target_window_duration_s + marked_window_end_grace_s
+    if latest_target_end_s > capture_window_duration_s:
+        msg = (
+            "gesture_target_durations values must leave room for grace inside the "
+            f"capture window for {gesture!r} in {resolved_path}"
+        )
         raise ValueError(msg)
+
+    max_target_start_s = capture_window_duration_s - latest_target_end_s
+    if countdown_duration_s < max_target_start_s:
+        msg = (
+            "countdown_duration_s is too short to randomly place capture_window "
+            f"for {gesture!r} in {resolved_path}"
+        )
+        raise ValueError(msg)
+
+
+def _optional_table(value: object) -> dict[str, Any] | None:
+    """Normalize one optional TOML table."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return value
+
+    msg = "Expected table or null."
+    raise ValueError(msg)
+
+
+def _resolve_float(
+    *,
+    profile_data: dict[str, Any],
+    global_data: dict[str, Any],
+    key: str,
+    default: float,
+) -> float:
+    """Resolve one numeric value from profile, global config, or default."""
+    if key in profile_data:
+        return _require_float(profile_data, key)
+    if key in global_data:
+        return _require_float(global_data, key)
+    return default
+
+
+def _resolve_str(
+    *,
+    profile_data: dict[str, Any],
+    global_data: dict[str, Any],
+    key: str,
+    default: str,
+) -> str:
+    """Resolve one string value from profile, global config, or default."""
+    if key in profile_data:
+        return _require_str(profile_data, key)
+    if key in global_data:
+        return _require_str(global_data, key)
+    return default
+
+
+def _resolve_optional_str_from_tables(
+    *,
+    profile_table: dict[str, Any] | None,
+    global_table: dict[str, Any] | None,
+    key: str,
+) -> str | None:
+    """Resolve one optional string from merged table sources."""
+    if profile_table is not None and key in profile_table:
+        return _optional_str(profile_table[key])
+    if global_table is not None and key in global_table:
+        return _optional_str(global_table[key])
+    return None
+
+
+def _resolve_int_from_tables(
+    *,
+    profile_table: dict[str, Any] | None,
+    global_table: dict[str, Any] | None,
+    key: str,
+    default: int,
+) -> int:
+    """Resolve one integer from merged table sources."""
+    if profile_table is not None and key in profile_table:
+        return _require_int(profile_table, key)
+    if global_table is not None and key in global_table:
+        return _require_int(global_table, key)
+    return default
 
 
 def _require_table(data: dict[str, Any], key: str) -> dict[str, Any]:
@@ -518,16 +696,18 @@ def _require_str_tuple(data: dict[str, Any], key: str) -> tuple[str, ...]:
     """Require one non-empty string list by key."""
     value = data.get(key)
     if not isinstance(value, list) or not value:
-        msg = f"Expected a non-empty list of strings for {key!r}"
+        msg = f"Expected a non-empty string list for {key!r}"
         raise ValueError(msg)
 
-    normalized: list[str] = []
+    items = []
     for item in value:
         if not isinstance(item, str) or not item.strip():
-            msg = f"Expected a non-empty string in {key!r}"
+            msg = f"Expected only non-empty strings in {key!r}"
             raise ValueError(msg)
-        stripped = item.strip()
-        if stripped not in normalized:
-            normalized.append(stripped)
+        items.append(item.strip())
 
-    return tuple(normalized)
+    deduped_items = tuple(dict.fromkeys(items))
+    if len(deduped_items) != len(items):
+        msg = f"Duplicate values are not allowed in {key!r}"
+        raise ValueError(msg)
+    return deduped_items

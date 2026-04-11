@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import random
 import select
 import sys
 import time
@@ -12,6 +14,7 @@ from typing import Self
 import serial
 from rich.console import Console
 
+from vassago.collection.rd import quick_qc
 from vassago.collection.rd import session as collection_session
 from vassago.collection.rd import ui as collection_ui
 from vassago.collection.rd.config import WindowRange
@@ -39,13 +42,30 @@ type TerminalAttributes = (
 )
 
 console = Console()
+CAPTURE_LOOP_SLEEP_SECONDS = 0.01
+CAPTURE_POLL_TIMEOUT_SECONDS = 0.05
+SYSTEM_RANDOM = random.SystemRandom()
+
+
+@dataclass(slots=True, frozen=True)
+class AttemptPlan:
+    """Concrete runtime plan for one collection attempt."""
+
+    countdown_duration_s: float
+    capture_window: WindowRange
+    target_window: WindowRange
+    marked_window_deadline_s: float
+    capture_start_delay_s: float
+    end_mark_key: str
 
 
 @dataclass(slots=True, frozen=True)
 class TakeCaptureResult:
-    """Raw UART bytes plus the operator-marked window for one take."""
+    """Raw UART bytes plus runtime windows for one take."""
 
     raw_capture: bytes
+    capture_window: WindowRange
+    target_window: WindowRange
     marked_window: WindowRange | None
 
 
@@ -121,9 +141,7 @@ def run_session(
         manifest_path=resolved_manifest_path,
         manifest=manifest,
     )
-    console.print(
-        f"Collection session stopped: {session_id} ({final_status})",
-    )
+    console.print(f"Collection session stopped: {session_id} ({final_status})")
     return build_run_summary(
         manifest_path=resolved_manifest_path,
         manifest=manifest,
@@ -168,7 +186,7 @@ def _run_take_loop(
             if take is None:
                 return
 
-            target_window = _window_from_dict(take.get("target_window"))
+            attempt_plan = _build_attempt_plan(manifest)
             take_index = _require_int(take, "take_index")
             take_id = _require_str(take, "take_id")
             batch_size = _require_int(manifest, "batch_size")
@@ -177,7 +195,12 @@ def _run_take_loop(
                 take_id=take_id,
                 take_index=take_index,
                 batch_size=batch_size,
-                target_window=target_window,
+                countdown_duration_s=attempt_plan.countdown_duration_s,
+                target_window_duration_s=(
+                    attempt_plan.target_window.end_s
+                    - attempt_plan.target_window.start_s
+                ),
+                end_mark_key=attempt_plan.end_mark_key,
                 accepted_take_count=collection_session.count_accepted_takes(manifest),
                 remaining_take_count=collection_session.count_remaining_takes(manifest),
             )
@@ -188,15 +211,33 @@ def _run_take_loop(
 
             capture_result = capture_take(
                 connection,
-                duration_seconds=_capture_duration_seconds(take),
+                attempt_plan=attempt_plan,
                 read_size=read_size,
             )
             summary = summarize_raw_capture(capture_result.raw_capture)
             collection_ui.render_capture_summary(
                 console,
                 summary=summary,
+                capture_window=capture_result.capture_window,
+                target_window=capture_result.target_window,
                 marked_window=capture_result.marked_window,
             )
+
+            qc_decision = quick_qc.evaluate_capture(
+                summary=summary,
+                target_window=capture_result.target_window,
+                marked_window=capture_result.marked_window,
+                marked_window_end_grace_s=(
+                    attempt_plan.marked_window_deadline_s
+                    - attempt_plan.target_window.end_s
+                ),
+            )
+            collection_ui.render_quick_qc(console, decision=qc_decision)
+            if not qc_decision.accepted:
+                decision = collection_ui.prompt_rejected_take_action(take_id=take_id)
+                if decision == collection_ui.TAKE_DECISION_QUIT:
+                    return
+                continue
 
             decision = collection_ui.prompt_take_decision(take_id=take_id)
             if decision == collection_ui.TAKE_DECISION_RETRY:
@@ -213,6 +254,8 @@ def _run_take_loop(
                 manifest=manifest,
                 take=take,
                 raw_uart_path=raw_uart_path,
+                capture_window=capture_result.capture_window,
+                target_window=capture_result.target_window,
                 marked_window=capture_result.marked_window,
             )
             collection_session.write_manifest(
@@ -224,24 +267,93 @@ def _run_take_loop(
 def capture_take(
     connection: serial.Serial,
     *,
-    duration_seconds: float,
+    attempt_plan: AttemptPlan,
     read_size: int,
 ) -> TakeCaptureResult:
-    """Capture one fixed-duration data window while polling for live marks."""
-    console.print("state: capturing")
-    console.print("control: press m at gesture start, then m again at gesture end")
-    connection.reset_input_buffer()
-    with _MarkedWindowRecorder(duration_seconds=duration_seconds) as marker:
-        raw_capture = read_data_window(
-            connection,
-            duration_seconds=duration_seconds,
-            read_size=read_size,
-            marker=marker,
-        )
-    raw_capture += read_available_bytes(connection, read_size=read_size)
+    """Capture one attempt with fixed countdown, GO, and hidden capture start."""
+    console.print("state: countdown")
+    console.print(
+        f"control: wait for GO, then press {attempt_plan.end_mark_key} to mark end"
+    )
+
+    timeline_start = time.perf_counter()
+    go_at = timeline_start + attempt_plan.countdown_duration_s
+    capture_start_at = timeline_start + attempt_plan.capture_start_delay_s
+    capture_end_at = capture_start_at + (
+        attempt_plan.capture_window.end_s - attempt_plan.capture_window.start_s
+    )
+    target_end_at = capture_start_at + attempt_plan.target_window.end_s
+    raw_capture = bytearray()
+
+    last_countdown_value: int | None = None
+    capture_started = False
+    go_announced = False
+    target_end_announced = False
+
+    original_timeout = connection.timeout
+    connection.timeout = _capture_poll_timeout(original_timeout)
+    try:
+        with _MarkedWindowRecorder(
+            capture_duration_s=attempt_plan.capture_window.end_s,
+            target_window=attempt_plan.target_window,
+            end_mark_key=attempt_plan.end_mark_key,
+        ) as marker:
+            while True:
+                now = time.perf_counter()
+                if not go_announced:
+                    last_countdown_value = _emit_countdown_tick(
+                        now=now,
+                        go_at=go_at,
+                        last_countdown_value=last_countdown_value,
+                    )
+
+                if not capture_started and now >= capture_start_at:
+                    capture_started = True
+                    connection.reset_input_buffer()
+
+                if not go_announced and now >= go_at:
+                    go_announced = True
+                    console.print("GO")
+
+                if capture_started:
+                    capture_elapsed_s = min(
+                        attempt_plan.capture_window.end_s,
+                        now - capture_start_at,
+                    )
+                    marker.poll(elapsed_seconds=capture_elapsed_s)
+
+                    if not target_end_announced and now >= target_end_at:
+                        target_end_announced = True
+                        console.print("target_window ended")
+
+                    if now >= capture_end_at:
+                        break
+
+                    chunk = connection.read(read_size)
+                    if chunk:
+                        raw_capture.extend(chunk)
+                    marker.poll(
+                        elapsed_seconds=min(
+                            attempt_plan.capture_window.end_s,
+                            time.perf_counter() - capture_start_at,
+                        ),
+                    )
+                    continue
+
+                time.sleep(CAPTURE_LOOP_SLEEP_SECONDS)
+
+            marker.poll(elapsed_seconds=attempt_plan.capture_window.end_s)
+            marked_window = marker.window
+    finally:
+        connection.timeout = original_timeout
+
+    console.print("capture_window ended")
     return TakeCaptureResult(
-        raw_capture=raw_capture,
-        marked_window=marker.window,
+        raw_capture=bytes(raw_capture)
+        + read_available_bytes(connection, read_size=read_size),
+        capture_window=attempt_plan.capture_window,
+        target_window=attempt_plan.target_window,
+        marked_window=marked_window,
     )
 
 
@@ -254,30 +366,6 @@ def summarize_raw_capture(raw_capture: bytes) -> SmokeTestSummary:
         bytes_read=len(raw_capture),
         invalid_packet_count=parser.invalid_packet_count,
     )
-
-
-def read_data_window(
-    connection: serial.Serial,
-    *,
-    duration_seconds: float,
-    read_size: int,
-    marker: _MarkedWindowRecorder,
-) -> bytes:
-    """Read raw bytes from the data UART for a fixed duration."""
-    buffer = bytearray()
-    start_time = time.perf_counter()
-    deadline = start_time + duration_seconds
-
-    while True:
-        now = time.perf_counter()
-        if now >= deadline:
-            return bytes(buffer)
-
-        chunk = connection.read(read_size)
-        if chunk:
-            buffer.extend(chunk)
-
-        marker.poll(elapsed_seconds=now - start_time)
 
 
 def read_available_bytes(
@@ -299,6 +387,77 @@ def read_available_bytes(
         connection.timeout = original_timeout
 
 
+def _build_attempt_plan(manifest: collection_session.JsonObject) -> AttemptPlan:
+    """Build one randomized runtime plan from the manifest snapshot."""
+    config_snapshot = _require_dict(manifest, "config_snapshot")
+    runtime = _require_dict(config_snapshot, "runtime")
+    gesture_target_durations = _require_dict(
+        config_snapshot, "gesture_target_durations"
+    )
+    gesture = _require_str(manifest, "gesture")
+
+    capture_window_duration_s = _require_float(runtime, "capture_window_duration_s")
+    countdown_duration_s = _require_float(runtime, "countdown_duration_s")
+    marked_window_end_grace_s = _require_float(runtime, "marked_window_end_grace_s")
+    end_mark_key = _require_str(runtime, "end_mark_key")
+    target_window_duration_s = _require_float(gesture_target_durations, gesture)
+
+    max_target_start_s = (
+        capture_window_duration_s - target_window_duration_s - marked_window_end_grace_s
+    )
+    if max_target_start_s < 0:
+        msg = "target_window_duration_s + grace exceeds capture_window_duration_s."
+        raise ValueError(msg)
+
+    target_start_s = SYSTEM_RANDOM.uniform(0.0, max_target_start_s)
+    target_window = WindowRange(
+        start_s=target_start_s,
+        end_s=target_start_s + target_window_duration_s,
+    )
+    capture_window = WindowRange(
+        start_s=0.0,
+        end_s=capture_window_duration_s,
+    )
+    marked_window_deadline_s = target_window.end_s + marked_window_end_grace_s
+    capture_start_delay_s = countdown_duration_s - target_window.start_s
+    if capture_start_delay_s < 0:
+        msg = "countdown_duration_s is too short for the randomized capture start."
+        raise ValueError(msg)
+
+    return AttemptPlan(
+        countdown_duration_s=countdown_duration_s,
+        capture_window=capture_window,
+        target_window=target_window,
+        marked_window_deadline_s=marked_window_deadline_s,
+        capture_start_delay_s=capture_start_delay_s,
+        end_mark_key=end_mark_key,
+    )
+
+
+def _capture_poll_timeout(original_timeout: float | None) -> float:
+    """Choose a short poll timeout for responsive live capture prompts."""
+    if original_timeout is None:
+        return CAPTURE_POLL_TIMEOUT_SECONDS
+    return min(original_timeout, CAPTURE_POLL_TIMEOUT_SECONDS)
+
+
+def _emit_countdown_tick(
+    *,
+    now: float,
+    go_at: float,
+    last_countdown_value: int | None,
+) -> int | None:
+    """Render countdown ticks only when the visible second changes."""
+    remaining_s = go_at - now
+    if remaining_s <= 0:
+        return last_countdown_value
+
+    visible_value = math.ceil(remaining_s)
+    if visible_value != last_countdown_value:
+        console.print(f"countdown: {visible_value}")
+    return visible_value
+
+
 def _configure_radar(manifest: collection_session.JsonObject) -> None:
     """Send the configured cfg to the radar before starting the session."""
     config_snapshot = _require_dict(manifest, "config_snapshot")
@@ -317,26 +476,6 @@ def _configure_radar(manifest: collection_session.JsonObject) -> None:
         stream_output=False,
     )
     validate_cli_session(session)
-
-
-def _capture_duration_seconds(take: collection_session.JsonObject) -> float:
-    """Extract the fixed capture duration from one take record."""
-    capture_window = _window_from_dict(take.get("capture_window"))
-    return capture_window.end_s - capture_window.start_s
-
-
-def _window_from_dict(value: object) -> WindowRange:
-    """Parse one manifest window mapping back into a typed object."""
-    if not isinstance(value, dict):
-        msg = "Expected a window object."
-        raise TypeError(msg)
-
-    start_s = value.get("start_s")
-    end_s = value.get("end_s")
-    if not isinstance(start_s, int | float) or not isinstance(end_s, int | float):
-        msg = "Window start_s and end_s must be numeric."
-        raise TypeError(msg)
-    return WindowRange(start_s=float(start_s), end_s=float(end_s))
 
 
 def _require_dict(
@@ -372,31 +511,43 @@ def _require_int(data: collection_session.JsonObject, key: str) -> int:
     raise ValueError(msg)
 
 
+def _require_float(data: collection_session.JsonObject, key: str) -> float:
+    """Require one numeric field from a manifest mapping."""
+    value = data.get(key)
+    if isinstance(value, int | float):
+        return float(value)
+
+    msg = f"Field {key!r} must be numeric."
+    raise ValueError(msg)
+
+
 @dataclass(slots=True)
 class _MarkedWindowRecorder:
     """Best-effort live key recorder for marked_window capture."""
 
-    duration_seconds: float
-    start_s: float | None = None
+    capture_duration_s: float
+    target_window: WindowRange
+    end_mark_key: str
     end_s: float | None = None
     _stdin_fd: int | None = None
     _original_state: TerminalAttributes | None = None
 
     def __enter__(self) -> Self:
         """Switch stdin into cbreak mode when supported."""
-        try:
-            if termios is None or tty is None or not sys.stdin.isatty():
-                return self
+        if termios is None or tty is None or not sys.stdin.isatty():
+            return self
 
+        try:
             stdin_fd = sys.stdin.fileno()
             original_state = termios.tcgetattr(stdin_fd)
             tty.setcbreak(stdin_fd)
-            self._stdin_fd = stdin_fd
-            self._original_state = original_state
-        except ImportError, OSError:
+        except OSError:
             self._stdin_fd = None
             self._original_state = None
+            return self
 
+        self._stdin_fd = stdin_fd
+        self._original_state = original_state
         return self
 
     def __exit__(
@@ -422,19 +573,23 @@ class _MarkedWindowRecorder:
 
     @property
     def window(self) -> WindowRange | None:
-        """Return the completed window only when two valid marks were recorded."""
-        if self.start_s is None or self.end_s is None:
+        """Return the completed window only when a valid end mark was recorded."""
+        if self.end_s is None:
             return None
-        if self.start_s >= self.end_s:
+        if self.end_s <= self.target_window.start_s:
             return None
         return WindowRange(
-            start_s=max(0.0, self.start_s),
-            end_s=min(self.duration_seconds, self.end_s),
+            start_s=self.target_window.start_s,
+            end_s=min(self.capture_duration_s, self.end_s),
         )
 
     def poll(self, *, elapsed_seconds: float) -> None:
-        """Record start/end marks when the operator presses m."""
+        """Record the end mark once the operator presses the configured key."""
         if self._stdin_fd is None:
+            return
+        if self.end_s is not None:
+            return
+        if elapsed_seconds < self.target_window.start_s:
             return
 
         ready, _, _ = select.select([sys.stdin], [], [], 0.0)
@@ -442,18 +597,25 @@ class _MarkedWindowRecorder:
             return
 
         try:
-            key = sys.stdin.read(1).lower()
+            key = sys.stdin.read(1)
         except OSError:
             return
 
-        if key != "m":
+        if not _matches_end_mark_key(key, self.end_mark_key):
             return
 
-        if self.start_s is None:
-            self.start_s = elapsed_seconds
-            console.print(f"mark: start @ {elapsed_seconds:.2f}s")
-            return
+        self.end_s = elapsed_seconds
+        console.print(f"mark: end @ {elapsed_seconds:.2f}s")
 
-        if self.end_s is None:
-            self.end_s = elapsed_seconds
-            console.print(f"mark: end @ {elapsed_seconds:.2f}s")
+
+def _matches_end_mark_key(key: str, configured_key: str) -> bool:
+    """Return whether one terminal key matches the configured end marker."""
+    return _normalize_key_name(key) == _normalize_key_name(configured_key)
+
+
+def _normalize_key_name(value: str) -> str:
+    """Normalize literal keys and named keys like `space`."""
+    normalized = value.strip().lower()
+    if value == " " or normalized == "space":
+        return "space"
+    return normalized

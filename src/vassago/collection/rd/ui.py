@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 import questionary
 from rich.table import Table
 
+from vassago.collection.rd.quick_qc import describe_reason
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
@@ -15,6 +17,7 @@ if TYPE_CHECKING:
 
     from vassago.collection.rd.config import CollectionProfile
     from vassago.collection.rd.config import WindowRange
+    from vassago.collection.rd.quick_qc import QuickQcDecision
     from vassago.collection.rd.session import SessionSummary
     from vassago.firmware.mmwave.protocol import SmokeTestSummary
 
@@ -35,6 +38,7 @@ def render_collection_profiles(
     table.add_column("Config ID")
     table.add_column("Label")
     table.add_column("Batch Size", justify="right")
+    table.add_column("Capture", justify="right")
     table.add_column("Cfg Path")
     table.add_column("Description")
 
@@ -43,12 +47,13 @@ def render_collection_profiles(
             profile.config_id,
             profile.label,
             str(profile.batch_size),
+            f"{profile.capture_window_duration_s:.2f}s",
             str(profile.firmware_config_path),
             profile.description,
         )
 
     if not profiles:
-        table.add_row("-", "No collection configs", "0", "-", "-")
+        table.add_row("-", "No collection configs", "0", "0.00s", "-", "-")
 
     console.print(table)
 
@@ -63,7 +68,6 @@ def render_sessions(
     table.add_column("Status")
     table.add_column("Subject")
     table.add_column("Gesture")
-    table.add_column("Speed")
     table.add_column("Accepted", justify="right")
     table.add_column("Remaining", justify="right")
     table.add_column("Manifest")
@@ -74,14 +78,13 @@ def render_sessions(
             summary.session_status,
             summary.subject_name,
             summary.gesture,
-            summary.speed,
             str(summary.accepted_take_count),
             str(summary.remaining_take_count),
             str(summary.manifest_path),
         )
 
     if not sessions:
-        table.add_row("-", "-", "-", "-", "-", "0", "0", "-")
+        table.add_row("-", "-", "-", "-", "0", "0", "-")
 
     console.print(table)
 
@@ -101,20 +104,21 @@ def render_session_summary(
     table.add_row("session_status", str(manifest["session_status"]))
     table.add_row("subject_name", str(manifest["subject_name"]))
     table.add_row("gesture", str(manifest["gesture"]))
-    table.add_row("speed", str(manifest["speed"]))
     table.add_row("config_id", str(manifest["config_id"]))
     table.add_row("cli_port", str(manifest["cli_port"]))
     table.add_row("data_port", str(manifest["data_port"]))
     console.print(table)
 
 
-def render_take_state(
+def render_take_state(  # noqa: PLR0913
     console: Console,
     *,
     take_id: str,
     take_index: int,
     batch_size: int,
-    target_window: WindowRange,
+    countdown_duration_s: float,
+    target_window_duration_s: float,
+    end_mark_key: str,
     accepted_take_count: int,
     remaining_take_count: int,
 ) -> None:
@@ -126,13 +130,10 @@ def render_take_state(
     table.add_row("progress", f"{take_index}/{batch_size}")
     table.add_row("accepted", str(accepted_take_count))
     table.add_row("remaining", str(remaining_take_count))
-    table.add_row(
-        "target_window",
-        f"{target_window.start_s:.2f}s -> {target_window.end_s:.2f}s",
-    )
-    table.add_row(
-        "controls", "Start, then press m at gesture start/end during capture."
-    )
+    table.add_row("countdown", f"{countdown_duration_s:.2f}s")
+    table.add_row("target_window_duration", f"{target_window_duration_s:.2f}s")
+    table.add_row("end_mark_key", end_mark_key)
+    table.add_row("controls", f"Start, wait for GO, then press {end_mark_key}.")
     console.print(table)
 
 
@@ -140,6 +141,8 @@ def render_capture_summary(
     console: Console,
     *,
     summary: SmokeTestSummary,
+    capture_window: WindowRange,
+    target_window: WindowRange,
     marked_window: WindowRange | None,
 ) -> None:
     """Render a short post-capture summary for operator review."""
@@ -153,12 +156,39 @@ def render_capture_summary(
     table.add_row("last_frame", str(summary.last_frame_number))
     table.add_row("frame_gaps", str(summary.frame_gap_count))
     table.add_row(
+        "capture_window",
+        f"{capture_window.start_s:.2f}s -> {capture_window.end_s:.2f}s",
+    )
+    table.add_row(
+        "target_window",
+        f"{target_window.start_s:.2f}s -> {target_window.end_s:.2f}s",
+    )
+    table.add_row(
         "marked_window",
         (
             f"{marked_window.start_s:.2f}s -> {marked_window.end_s:.2f}s"
             if marked_window is not None
             else "null"
         ),
+    )
+    console.print(table)
+
+
+def render_quick_qc(
+    console: Console,
+    *,
+    decision: QuickQcDecision,
+) -> None:
+    """Render the minimal quick-QC result for one attempt."""
+    table = Table(title="Quick QC")
+    table.add_column("Field")
+    table.add_column("Value")
+    table.add_row("result", "pass" if decision.accepted else "reject")
+    table.add_row(
+        "reasons",
+        ", ".join(describe_reason(reason) for reason in decision.reasons)
+        if decision.reasons
+        else "-",
     )
     console.print(table)
 
@@ -288,6 +318,18 @@ def prompt_take_decision(*, take_id: str) -> str:
         ],
     ).ask()
     return _require_answer(response, "Take decision selection was cancelled.")
+
+
+def prompt_rejected_take_action(*, take_id: str) -> str:
+    """Prompt after quick-QC rejects one attempt."""
+    response = questionary.select(
+        f"{take_id}: quick QC rejected this attempt",
+        choices=[
+            questionary.Choice(title="Retry take", value=TAKE_DECISION_RETRY),
+            questionary.Choice(title="Quit session", value=TAKE_DECISION_QUIT),
+        ],
+    ).ask()
+    return _require_answer(response, "Rejected-take action selection was cancelled.")
 
 
 def _require_answer[T](answer: T | None, error_message: str) -> T:

@@ -8,16 +8,19 @@ from dataclasses import dataclass
 from datetime import UTC
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from vassago.collection.rd.config import CollectionProfile
-from vassago.collection.rd.config import WindowRange
 from vassago.collection.rd.paths import resolve_repo_path
 from vassago.collection.rd.paths import to_repo_relative_path
+
+if TYPE_CHECKING:
+    from vassago.collection.rd.config import CollectionProfile
+    from vassago.collection.rd.config import WindowRange
 
 DEFAULT_SESSIONS_ROOT = Path("data/collection/rd/sessions")
 MANIFEST_FILENAME = "manifest.json"
 RAW_UART_FILENAME = "raw_uart.bin"
-SESSION_SCHEMA_VERSION = "collection_rd_session_v2"
+SESSION_SCHEMA_VERSION = "collection_rd_session_v3"
 SESSION_STATUS_PLANNED = "planned"
 SESSION_STATUS_IN_PROGRESS = "in_progress"
 SESSION_STATUS_COMPLETED = "completed"
@@ -43,7 +46,6 @@ class SessionInitInput:
     radar_id: str
     firmware_id: str
     gesture: str
-    speed: str
     cli_port: str
     data_port: str
     data_baudrate: int
@@ -58,7 +60,6 @@ class SessionSummary:
     session_status: str
     subject_name: str
     gesture: str
-    speed: str
     accepted_take_count: int
     remaining_take_count: int
     updated_at: str
@@ -94,14 +95,6 @@ def build_session_manifest(
 ) -> JsonObject:
     """Build the initial manifest dictionary for one new session."""
     profile = session_input.profile
-    capture_window = WindowRange(
-        start_s=0.0,
-        end_s=profile.capture_duration_s,
-    )
-    target_window = profile.target_window_for(
-        gesture=session_input.gesture,
-        speed=session_input.speed,
-    )
     created_at = now.isoformat()
 
     return {
@@ -110,7 +103,6 @@ def build_session_manifest(
             now=now,
             subject_name=session_input.subject_name,
             gesture=session_input.gesture,
-            speed=session_input.speed,
         ),
         "created_at": created_at,
         "updated_at": created_at,
@@ -126,25 +118,18 @@ def build_session_manifest(
         "radar_id": session_input.radar_id,
         "firmware_id": session_input.firmware_id,
         "gesture": session_input.gesture,
-        "speed": session_input.speed,
         "config_id": profile.config_id,
         "cli_port": session_input.cli_port,
         "data_port": session_input.data_port,
         "data_baudrate": session_input.data_baudrate,
         "config_snapshot": profile.as_snapshot(),
-        "takes": build_take_plan(
-            batch_size=profile.batch_size,
-            capture_window=capture_window,
-            target_window=target_window,
-        ),
+        "takes": build_take_plan(batch_size=profile.batch_size),
     }
 
 
 def build_take_plan(
     *,
     batch_size: int,
-    capture_window: WindowRange,
-    target_window: WindowRange,
 ) -> list[JsonObject]:
     """Build the planned take list for one session manifest."""
     return [
@@ -154,8 +139,8 @@ def build_take_plan(
             "status": TAKE_STATUS_PLANNED,
             "raw_uart_path": None,
             "accepted_at": None,
-            "capture_window": capture_window.as_dict(),
-            "target_window": target_window.as_dict(),
+            "capture_window": None,
+            "target_window": None,
             "marked_window": None,
         }
         for take_index in range(1, batch_size + 1)
@@ -207,7 +192,6 @@ def list_unfinished_sessions(
                 session_status=session_status,
                 subject_name=_require_str(manifest, "subject_name"),
                 gesture=_require_str(manifest, "gesture"),
-                speed=_require_str(manifest, "speed"),
                 accepted_take_count=count_accepted_takes(manifest),
                 remaining_take_count=count_remaining_takes(manifest),
                 updated_at=_require_str(manifest, "updated_at"),
@@ -259,6 +243,8 @@ def accept_take(
     manifest: JsonObject,
     take: JsonObject,
     raw_uart_path: Path,
+    capture_window: WindowRange,
+    target_window: WindowRange,
     marked_window: WindowRange | None,
     accepted_at: datetime | None = None,
 ) -> None:
@@ -267,6 +253,8 @@ def accept_take(
     take["status"] = TAKE_STATUS_ACCEPTED
     take["raw_uart_path"] = to_repo_relative_path(raw_uart_path)
     take["accepted_at"] = timestamp.isoformat()
+    take["capture_window"] = capture_window.as_dict()
+    take["target_window"] = target_window.as_dict()
     take["marked_window"] = (
         marked_window.as_dict() if marked_window is not None else None
     )
@@ -286,12 +274,10 @@ def build_session_id(
     now: datetime,
     subject_name: str,
     gesture: str,
-    speed: str,
 ) -> str:
     """Build a stable session identifier from the runtime inputs."""
     return (
-        f"{now.strftime('%Y%m%d_%H%M%S')}_"
-        f"{_slugify(subject_name)}_{_slugify(gesture)}_{_slugify(speed)}"
+        f"{now.strftime('%Y%m%d_%H%M%S')}_{_slugify(subject_name)}_{_slugify(gesture)}"
     )
 
 
