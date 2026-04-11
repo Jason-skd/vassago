@@ -29,19 +29,25 @@ def test_initialize_session_persists_manifest_with_config_snapshot(tmp_path) -> 
     )
 
     loaded_manifest = collection_session.load_manifest(manifest_path)
+    config_snapshot = loaded_manifest["config_snapshot"]
+    assert isinstance(config_snapshot, dict)
+    firmware = config_snapshot["firmware"]
+    assert isinstance(firmware, dict)
+    takes = loaded_manifest["takes"]
+    assert isinstance(takes, list)
+    first_take = takes[0]
+    assert isinstance(first_take, dict)
 
     assert manifest_path.exists()
     assert manifest["schema_version"] == collection_session.SESSION_SCHEMA_VERSION
     assert loaded_manifest["subject_name"] == "alice"
     assert loaded_manifest["config_id"] == "rd_phase1_default"
-    assert loaded_manifest["config_snapshot"]["firmware"]["config_path"] == (
-        "configs/rd_phase1_uart.cfg"
-    )
-    assert loaded_manifest["takes"][0]["capture_window"] == {
+    assert firmware["config_path"] == "configs/rd_phase1_uart.cfg"
+    assert first_take["capture_window"] == {
         "start_s": 0.0,
         "end_s": 5.0,
     }
-    assert loaded_manifest["takes"][0]["target_window"] == {
+    assert first_take["target_window"] == {
         "start_s": 1.2,
         "end_s": 2.8,
     }

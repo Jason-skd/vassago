@@ -212,7 +212,9 @@ def test_run_session_accepts_take_and_updates_manifest(tmp_path, monkeypatch) ->
         sessions_root=tmp_path,
     )
     manifest["batch_size"] = 1
-    manifest["takes"] = manifest["takes"][:1]
+    takes = manifest["takes"]
+    assert isinstance(takes, list)
+    manifest["takes"] = takes[:1]
     collection_session.write_manifest(manifest_path=manifest_path, manifest=manifest)
 
     class FakeSerial:
@@ -265,11 +267,12 @@ def test_run_session_accepts_take_and_updates_manifest(tmp_path, monkeypatch) ->
 
     summary = collection_capture.run_session(manifest_path)
     updated_manifest = collection_session.load_manifest(manifest_path)
+    updated_takes = updated_manifest["takes"]
+    assert isinstance(updated_takes, list)
+    first_take = updated_takes[0]
+    assert isinstance(first_take, dict)
 
     assert summary.session_status == collection_session.SESSION_STATUS_COMPLETED
     assert summary.accepted_take_count == 1
-    assert (
-        updated_manifest["takes"][0]["status"]
-        == collection_session.TAKE_STATUS_ACCEPTED
-    )
-    assert updated_manifest["takes"][0]["raw_uart_path"] is not None
+    assert first_take["status"] == collection_session.TAKE_STATUS_ACCEPTED
+    assert first_take["raw_uart_path"] is not None

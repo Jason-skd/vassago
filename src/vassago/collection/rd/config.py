@@ -471,7 +471,11 @@ def _require_float(
             raise ValueError(msg)
         return default
 
-    return _optional_float(data[key], allow_none=False)
+    value = _optional_float(data[key], allow_none=False)
+    if value is None:
+        msg = f"Field {key!r} must be numeric."
+        raise ValueError(msg)
+    return value
 
 
 def _optional_float(

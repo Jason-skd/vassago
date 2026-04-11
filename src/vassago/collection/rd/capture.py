@@ -34,6 +34,10 @@ except ImportError:  # pragma: no cover - POSIX terminals are the primary target
     termios = None
     tty = None
 
+type TerminalAttributes = (
+    list[int | list[bytes | int]] | list[int | list[bytes]] | list[int | list[int]]
+)
+
 console = Console()
 
 
@@ -376,7 +380,7 @@ class _MarkedWindowRecorder:
     start_s: float | None = None
     end_s: float | None = None
     _stdin_fd: int | None = None
-    _original_state: list[object] | None = None
+    _original_state: TerminalAttributes | None = None
 
     def __enter__(self) -> Self:
         """Switch stdin into cbreak mode when supported."""
@@ -384,9 +388,11 @@ class _MarkedWindowRecorder:
             if termios is None or tty is None or not sys.stdin.isatty():
                 return self
 
-            self._stdin_fd = sys.stdin.fileno()
-            self._original_state = termios.tcgetattr(self._stdin_fd)
-            tty.setcbreak(self._stdin_fd)
+            stdin_fd = sys.stdin.fileno()
+            original_state = termios.tcgetattr(stdin_fd)
+            tty.setcbreak(stdin_fd)
+            self._stdin_fd = stdin_fd
+            self._original_state = original_state
         except ImportError, OSError:
             self._stdin_fd = None
             self._original_state = None
@@ -400,13 +406,18 @@ class _MarkedWindowRecorder:
         _traceback: object,
     ) -> None:
         """Restore the original terminal mode."""
-        if termios is None or self._stdin_fd is None or self._original_state is None:
+        if termios is None:
+            return
+
+        stdin_fd = self._stdin_fd
+        original_state = self._original_state
+        if stdin_fd is None or original_state is None:
             return
 
         termios.tcsetattr(
-            self._stdin_fd,
+            stdin_fd,
             termios.TCSADRAIN,
-            self._original_state,
+            original_state,
         )
 
     @property

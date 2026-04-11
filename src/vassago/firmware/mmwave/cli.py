@@ -143,8 +143,14 @@ def handle_smoke_test(  # noqa: PLR0913
         cli_port=selected_cli_port,
         config_path=selected_config_path,
     )
+    if selected_data_port is None:
+        msg = "A data port should be resolved before starting the smoke test."
+        raise AssertionError(msg)
 
     if selected_config_path is not None:
+        if selected_cli_port is None:
+            msg = "A CLI port should be resolved before uploading a cfg file."
+            raise AssertionError(msg)
         _send_selected_config(
             cli_port=selected_cli_port,
             cli_baudrate=cli_baudrate,
@@ -186,7 +192,7 @@ def _validate_required_ports(
 
 def _send_selected_config(
     *,
-    cli_port: str | None,
+    cli_port: str,
     cli_baudrate: int,
     config_path: Path,
 ) -> None:

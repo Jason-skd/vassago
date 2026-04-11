@@ -20,11 +20,16 @@ def test_collection_profile_snapshot_carries_full_effective_config() -> None:
     profile = collection_config.get_collection_profile("rd_phase1_default")
 
     snapshot = profile.as_snapshot()
+    serial = snapshot["serial"]
+    target_windows = snapshot["target_windows"]
+
+    assert isinstance(serial, dict)
+    assert isinstance(target_windows, list)
 
     assert snapshot["config_id"] == "rd_phase1_default"
     assert snapshot["firmware"] == {
         "config_id": "rd_candidate",
         "config_path": "configs/rd_phase1_uart.cfg",
     }
-    assert snapshot["serial"]["data_baudrate"] == 921_600
-    assert len(snapshot["target_windows"]) == 12
+    assert serial["data_baudrate"] == 921_600
+    assert len(target_windows) == 12
