@@ -15,3 +15,5 @@
 
 - [mmwave_smoke_test.md](/Users/skd/Documents/vscode-projects/vassago/docs/collaborators/tutorials/mmwave_smoke_test.md)
   mmWave 板卡 `smoke-test` 的简明操作手册。
+- [rd_collection.md](/Users/skd/Documents/vscode-projects/vassago/docs/collaborators/tutorials/rd_collection.md)
+  RD `collection` 的简明操作手册。
