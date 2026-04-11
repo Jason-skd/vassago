@@ -1,12 +1,18 @@
+# --- vassago:meta ---
+# config_kind = "collection_rd_profile"
+# config_id = "rd_phase1_default"
+# label = "RD Phase 1 Default"
+# description = "Default RD collection profile for the current UART-first workflow."
+# lifecycle = "active"
+# ---
 schema_version = "collection_rd_profile_v2"
-config_id = "rd_phase1_default"
-label = "RD Phase 1 Default"
-description = "Default RD collection profile for the current UART-first workflow."
 batch_size = 12
+
+[global]
+config_id = "rd_global_default"
 
 [firmware]
 config_id = "rd_candidate"
-config_path = "configs/rd_phase1_uart.cfg"
 
 [defaults]
 hand = "right"

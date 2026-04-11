@@ -1,0 +1,152 @@
+schema_version = "mmwave_cfg_command_registry_v1"
+
+[commands.sensorStop]
+status = "supported"
+arg_counts = [0]
+required = true
+min_occurs = 1
+max_occurs = 1
+
+[commands.flushCfg]
+status = "supported"
+arg_counts = [0]
+required = true
+min_occurs = 1
+max_occurs = 1
+
+[commands.dfeDataOutputMode]
+status = "supported"
+arg_counts = [1]
+required = true
+max_occurs = 1
+
+[commands.channelCfg]
+status = "supported"
+arg_counts = [3]
+required = true
+max_occurs = 1
+
+[commands.adcCfg]
+status = "supported"
+arg_counts = [2]
+required = true
+max_occurs = 1
+
+[commands.adcbufCfg]
+status = "supported"
+arg_counts = [5]
+required = true
+max_occurs = 1
+
+[commands.lowPower]
+status = "supported"
+arg_counts = [2]
+max_occurs = 1
+
+[commands.profileCfg]
+status = "supported"
+arg_counts = [14]
+required = true
+max_occurs = 1
+
+[commands.chirpCfg]
+status = "supported"
+arg_counts = [8]
+min_occurs = 1
+
+[commands.frameCfg]
+status = "supported"
+arg_counts = [7]
+required = true
+max_occurs = 1
+
+[commands.guiMonitor]
+status = "supported"
+arg_counts = [7]
+max_occurs = 1
+
+[commands.cfarCfg]
+status = "supported"
+arg_counts = [9]
+min_occurs = 2
+max_occurs = 2
+
+[commands.multiObjBeamForming]
+status = "supported"
+arg_counts = [3]
+max_occurs = 1
+
+[commands.calibDcRangeSig]
+status = "supported"
+arg_counts = [5]
+max_occurs = 1
+
+[commands.clutterRemoval]
+status = "supported"
+arg_counts = [2]
+max_occurs = 1
+
+[commands.compRangeBiasAndRxChanPhase]
+status = "supported"
+arg_counts = [25]
+max_occurs = 1
+
+[commands.measureRangeBiasAndRxChanPhase]
+status = "supported"
+arg_counts = [3]
+max_occurs = 1
+
+[commands.aoaFovCfg]
+status = "supported"
+arg_counts = [5]
+max_occurs = 1
+
+[commands.cfarFovCfg]
+status = "supported"
+arg_counts = [4]
+min_occurs = 2
+max_occurs = 2
+
+[commands.extendedMaxVelocity]
+status = "supported"
+arg_counts = [2]
+max_occurs = 1
+
+[commands.CQRxSatMonitor]
+status = "supported"
+arg_counts = [5]
+max_occurs = 1
+
+[commands.CQSigImgMonitor]
+status = "supported"
+arg_counts = [3]
+max_occurs = 1
+
+[commands.analogMonitor]
+status = "supported"
+arg_counts = [2]
+max_occurs = 1
+
+[commands.lvdsStreamCfg]
+status = "supported"
+arg_counts = [4]
+max_occurs = 1
+
+[commands.calibData]
+status = "supported"
+arg_counts = [3]
+max_occurs = 1
+
+[commands.sensorStart]
+status = "supported"
+arg_counts = [0]
+required = true
+min_occurs = 1
+max_occurs = 1
+must_be_last = true
+
+[commands.bpmCfg]
+status = "warn"
+arg_counts = [4]
+max_occurs = 1
+notes = "Known from reference configs, but not part of the recommended in-repo baseline set."

@@ -41,7 +41,7 @@ def test_initialize_session_persists_manifest_with_config_snapshot(tmp_path) -> 
     assert manifest["schema_version"] == collection_session.SESSION_SCHEMA_VERSION
     assert loaded_manifest["subject_name"] == "alice"
     assert loaded_manifest["config_id"] == "rd_phase1_default"
-    assert firmware["config_path"] == "configs/rd_phase1_uart.cfg"
+    assert firmware["config_id"] == "rd_candidate"
     assert first_take["capture_window"] is None
     assert first_take["target_window"] is None
     assert first_take["marked_window"] is None

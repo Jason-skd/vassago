@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 def test_load_config_lines_skips_comments_and_blank_lines(tmp_path: Path) -> None:
     config_path = tmp_path / "test.cfg"
     config_path.write_text(
-        "\n% comment\nsensorStop\n\n# note\nsensorStart\n",
+        "\n% comment\nsensorStop % inline note\n\n# note\nsensorStart # tail note\n",
         encoding="utf-8",
     )
 

@@ -1,0 +1,16 @@
+# --- vassago:meta ---
+# config_kind = "collection_rd_global"
+# config_id = "rd_global_default"
+# label = "RD Global Default"
+# description = "Repository baseline for RD collection runtime defaults."
+# lifecycle = "active"
+# ---
+schema_version = "collection_rd_global_v1"
+capture_window_duration_s = 5.0
+countdown_duration_s = 5.0
+marked_window_end_grace_s = 0.25
+end_mark_key = "space"
+
+[serial]
+cli_baudrate = 115200
+data_baudrate = 921600

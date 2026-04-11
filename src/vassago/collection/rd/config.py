@@ -1,16 +1,25 @@
-"""TOML-backed collection profile loading for RD workflows."""
+"""Header-backed collection config loading for RD workflows."""
 
 from __future__ import annotations
 
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 from typing import Any
 
-from vassago.collection.rd.paths import resolve_repo_path
-from vassago.collection.rd.paths import to_repo_relative_path
+from vassago.configs.catalog import ConfigCatalog
+from vassago.configs.catalog import load_catalog
+from vassago.configs.metadata import HEADER_ONLY_KEYS
+from vassago.configs.metadata import parse_metadata_header
+from vassago.configs.models import ConfigKind
+from vassago.configs.models import ConfigLifecycle
+from vassago.configs.paths import resolve_repo_path
 
-CONFIG_SCHEMA_VERSION = "collection_rd_config_v2"
+if TYPE_CHECKING:
+    from vassago.configs.models import ConfigMetadata
+
+CONFIG_SCHEMA_VERSION = "collection_rd_config_v3"
 DEFAULT_BATCH_SIZE = 20
 DEFAULT_CAPTURE_WINDOW_DURATION_SECONDS = 5.0
 DEFAULT_COUNTDOWN_DURATION_SECONDS = 5.0
@@ -18,8 +27,7 @@ DEFAULT_MARKED_WINDOW_END_GRACE_SECONDS = 0.25
 DEFAULT_END_MARK_KEY = "space"
 DEFAULT_CLI_BAUDRATE = 115_200
 DEFAULT_DATA_BAUDRATE = 921_600
-DEFAULT_COLLECTION_CONFIGS_ROOT = Path("configs/collection/rd")
-DEFAULT_GLOBAL_CONFIG_PATH = Path("rd.toml")
+DEFAULT_COLLECTION_PROFILES_ROOT = Path("configs/collection/rd/profiles")
 
 
 @dataclass(slots=True, frozen=True)
@@ -92,6 +100,21 @@ class GestureTargetDuration:
 
 
 @dataclass(slots=True, frozen=True)
+class CollectionGlobalConfig:
+    """Repository baseline for RD collection runtime defaults."""
+
+    config_id: str
+    path: Path
+    label: str
+    description: str
+    capture_window_duration_s: float
+    countdown_duration_s: float
+    marked_window_end_grace_s: float
+    end_mark_key: str
+    serial: CollectionSerialDefaults
+
+
+@dataclass(slots=True, frozen=True)
 class CollectionProfile:
     """One dev-maintained collection profile exposed to the operator."""
 
@@ -99,9 +122,9 @@ class CollectionProfile:
     path: Path
     label: str
     description: str
+    global_config_id: str
     batch_size: int
     firmware_config_id: str
-    firmware_config_path: Path
     defaults: CollectionDefaults
     serial: CollectionSerialDefaults
     gestures: tuple[str, ...]
@@ -111,7 +134,6 @@ class CollectionProfile:
     countdown_duration_s: float
     marked_window_end_grace_s: float
     end_mark_key: str
-    global_path: Path | None = None
 
     @property
     def capture_duration_s(self) -> float:
@@ -129,13 +151,14 @@ class CollectionProfile:
 
     def as_snapshot(self) -> dict[str, object]:
         """Build the manifest snapshot for this profile."""
-        snapshot: dict[str, object] = {
+        return {
             "schema_version": CONFIG_SCHEMA_VERSION,
             "config_id": self.config_id,
-            "source_path": to_repo_relative_path(self.path),
             "label": self.label,
             "description": self.description,
-            "batch_size": self.batch_size,
+            "global": {
+                "config_id": self.global_config_id,
+            },
             "runtime": {
                 "capture_window_duration_s": self.capture_window_duration_s,
                 "countdown_duration_s": self.countdown_duration_s,
@@ -144,7 +167,6 @@ class CollectionProfile:
             },
             "firmware": {
                 "config_id": self.firmware_config_id,
-                "config_path": to_repo_relative_path(self.firmware_config_path),
             },
             "defaults": self.defaults.as_dict(),
             "serial": self.serial.as_dict(),
@@ -156,74 +178,105 @@ class CollectionProfile:
                 item.as_pair() for item in self.gesture_target_durations
             ),
         }
-        if self.global_path is not None:
-            snapshot["global_source_path"] = to_repo_relative_path(self.global_path)
-        return snapshot
 
 
 def list_collection_profiles(
     *,
-    configs_root: Path = DEFAULT_COLLECTION_CONFIGS_ROOT,
+    configs_root: Path = DEFAULT_COLLECTION_PROFILES_ROOT,
+    catalog: ConfigCatalog | None = None,
 ) -> list[CollectionProfile]:
-    """Return all repository-managed collection profiles."""
-    profiles_root = resolve_repo_path(configs_root)
-    if not profiles_root.exists():
-        return []
+    """Return all active repository-managed collection profiles."""
+    if configs_root != DEFAULT_COLLECTION_PROFILES_ROOT:
+        profiles_root = resolve_repo_path(configs_root)
+        if not profiles_root.exists():
+            return []
+        return [
+            load_collection_profile(path)
+            for path in sorted(profiles_root.glob("*.toml"))
+        ]
 
+    resolved_catalog = catalog or load_catalog()
     return [
-        load_collection_profile(path) for path in sorted(profiles_root.glob("*.toml"))
+        load_collection_profile(entry.path, catalog=resolved_catalog)
+        for entry in resolved_catalog.list_entries(
+            kind=ConfigKind.COLLECTION_RD_PROFILE,
+            lifecycle=ConfigLifecycle.ACTIVE,
+        )
     ]
 
 
 def get_collection_profile(
     config_id: str,
     *,
-    configs_root: Path = DEFAULT_COLLECTION_CONFIGS_ROOT,
+    configs_root: Path = DEFAULT_COLLECTION_PROFILES_ROOT,
+    catalog: ConfigCatalog | None = None,
 ) -> CollectionProfile:
-    """Resolve one profile id from the managed collection profiles."""
-    for profile in list_collection_profiles(configs_root=configs_root):
-        if profile.config_id == config_id:
-            return profile
+    """Resolve one active collection profile by config id."""
+    if configs_root != DEFAULT_COLLECTION_PROFILES_ROOT:
+        for profile in list_collection_profiles(configs_root=configs_root):
+            if profile.config_id == config_id:
+                return profile
+        msg = f"Unknown collection config id: {config_id}"
+        raise KeyError(msg)
 
-    msg = f"Unknown collection config id: {config_id}"
-    raise KeyError(msg)
+    resolved_catalog = catalog or load_catalog()
+    entry = resolved_catalog.require_entry(
+        kind=ConfigKind.COLLECTION_RD_PROFILE,
+        config_id=config_id,
+    )
+    if entry.lifecycle != ConfigLifecycle.ACTIVE:
+        msg = f"Collection profile {config_id!r} is not active."
+        raise KeyError(msg)
+    return load_collection_profile(entry.path, catalog=resolved_catalog)
 
 
-def load_collection_profile(path: Path) -> CollectionProfile:
+def load_collection_profile(
+    path: Path,
+    *,
+    catalog: ConfigCatalog | None = None,
+) -> CollectionProfile:
     """Load and validate one RD collection profile from TOML."""
     resolved_path = resolve_repo_path(path)
-    data = _load_toml_file(resolved_path)
-    global_path, global_data = _load_global_data()
-
-    config_id, label, description, batch_size = _load_scalars(
-        data,
-        resolved_path=resolved_path,
+    resolved_catalog = catalog or load_catalog()
+    metadata = _load_required_metadata(
+        resolved_path,
+        expected_kind=ConfigKind.COLLECTION_RD_PROFILE,
     )
-    firmware_config_id, firmware_config_path = _load_firmware_binding(data)
+    data = load_raw_toml(resolved_path)
+    _reject_header_only_keys(data, resolved_path=resolved_path)
+
+    global_config_id = _load_global_binding(data)
+    global_config = load_collection_global_config_by_id(
+        global_config_id,
+        catalog=resolved_catalog,
+    )
+    batch_size = _load_batch_size(data, resolved_path=resolved_path)
+    firmware_config_id = _load_firmware_binding(data)
+    _require_mmwave_config(firmware_config_id, catalog=resolved_catalog)
     capture_window_duration_s = _load_capture_window_duration_s(
         data,
-        global_data=global_data,
+        global_config=global_config,
         resolved_path=resolved_path,
     )
     countdown_duration_s = _load_countdown_duration_s(
         data,
-        global_data=global_data,
+        global_config=global_config,
         resolved_path=resolved_path,
     )
     marked_window_end_grace_s = _load_marked_window_end_grace_s(
         data,
-        global_data=global_data,
+        global_config=global_config,
         resolved_path=resolved_path,
     )
     end_mark_key = _load_end_mark_key(
         data,
-        global_data=global_data,
+        global_config=global_config,
         resolved_path=resolved_path,
     )
     defaults = _load_defaults(data, resolved_path=resolved_path)
     serial = _load_serial_defaults(
         profile_data=data,
-        global_data=global_data,
+        global_config=global_config,
     )
     gestures, environments = _load_options(
         data,
@@ -238,15 +291,14 @@ def load_collection_profile(path: Path) -> CollectionProfile:
         marked_window_end_grace_s=marked_window_end_grace_s,
         resolved_path=resolved_path,
     )
-
     return CollectionProfile(
-        config_id=config_id,
+        config_id=metadata.config_id,
         path=resolved_path,
-        label=label,
-        description=description,
+        label=metadata.label,
+        description=metadata.description,
+        global_config_id=global_config_id,
         batch_size=batch_size,
         firmware_config_id=firmware_config_id,
-        firmware_config_path=firmware_config_path,
         defaults=defaults,
         serial=serial,
         gestures=gestures,
@@ -256,56 +308,162 @@ def load_collection_profile(path: Path) -> CollectionProfile:
         countdown_duration_s=countdown_duration_s,
         marked_window_end_grace_s=marked_window_end_grace_s,
         end_mark_key=end_mark_key,
-        global_path=global_path,
     )
 
 
-def _load_toml_file(path: Path) -> dict[str, Any]:
+def load_collection_global_config(
+    path: Path | None = None,
+    *,
+    catalog: ConfigCatalog | None = None,
+) -> CollectionGlobalConfig:
+    """Load the active RD collection global baseline or one explicit file."""
+    if path is None:
+        resolved_catalog = catalog or load_catalog()
+        entry = resolved_catalog.require_single_active(
+            kind=ConfigKind.COLLECTION_RD_GLOBAL
+        )
+        return load_collection_global_config(path=entry.path, catalog=resolved_catalog)
+
+    resolved_path = resolve_repo_path(path)
+    metadata = _load_required_metadata(
+        resolved_path,
+        expected_kind=ConfigKind.COLLECTION_RD_GLOBAL,
+    )
+    data = load_raw_toml(resolved_path)
+    _reject_header_only_keys(data, resolved_path=resolved_path)
+    return CollectionGlobalConfig(
+        config_id=metadata.config_id,
+        path=resolved_path,
+        label=metadata.label,
+        description=metadata.description,
+        capture_window_duration_s=_load_positive_float(
+            data,
+            "capture_window_duration_s",
+            default=DEFAULT_CAPTURE_WINDOW_DURATION_SECONDS,
+            resolved_path=resolved_path,
+        ),
+        countdown_duration_s=_load_positive_float(
+            data,
+            "countdown_duration_s",
+            default=DEFAULT_COUNTDOWN_DURATION_SECONDS,
+            resolved_path=resolved_path,
+        ),
+        marked_window_end_grace_s=_load_non_negative_float(
+            data,
+            "marked_window_end_grace_s",
+            default=DEFAULT_MARKED_WINDOW_END_GRACE_SECONDS,
+            resolved_path=resolved_path,
+        ),
+        end_mark_key=_load_non_empty_str(
+            data,
+            "end_mark_key",
+            default=DEFAULT_END_MARK_KEY,
+            resolved_path=resolved_path,
+        ),
+        serial=_load_global_serial_defaults(
+            data,
+            resolved_path=resolved_path,
+        ),
+    )
+
+
+def load_collection_global_config_by_id(
+    config_id: str,
+    *,
+    catalog: ConfigCatalog | None = None,
+) -> CollectionGlobalConfig:
+    """Resolve and load one RD collection global baseline by id."""
+    resolved_catalog = catalog or load_catalog()
+    entry = resolved_catalog.require_entry(
+        kind=ConfigKind.COLLECTION_RD_GLOBAL,
+        config_id=config_id,
+    )
+    return load_collection_global_config(path=entry.path, catalog=resolved_catalog)
+
+
+def load_raw_toml(path: Path) -> dict[str, Any]:
     """Load one TOML file into a dictionary."""
-    with path.open("rb") as handle:
+    resolved_path = resolve_repo_path(path)
+    with resolved_path.open("rb") as handle:
         data = tomllib.load(handle)
     if not isinstance(data, dict):
-        msg = f"TOML root must be a table: {path}"
+        msg = f"TOML root must be a table: {resolved_path}"
         raise TypeError(msg)
     return data
 
 
-def _load_global_data() -> tuple[Path | None, dict[str, Any]]:
-    """Load the repository-level RD baseline when available."""
-    resolved_path = resolve_repo_path(DEFAULT_GLOBAL_CONFIG_PATH)
-    if not resolved_path.exists():
-        return None, {}
-    return resolved_path, _load_toml_file(resolved_path)
+def _load_required_metadata(
+    path: Path,
+    *,
+    expected_kind: ConfigKind,
+) -> ConfigMetadata:
+    metadata = parse_metadata_header(path)
+    if metadata.kind != expected_kind:
+        msg = f"Config kind mismatch for {path}: {metadata.kind.value}"
+        raise ValueError(msg)
+    return metadata
 
 
-def _load_scalars(
+def _reject_header_only_keys(
     data: dict[str, Any],
     *,
     resolved_path: Path,
-) -> tuple[str, str, str, int]:
-    """Load the top-level scalar fields from one profile."""
-    config_id = _require_str(data, "config_id")
-    label = _require_str(data, "label")
-    description = _require_str(data, "description")
+) -> None:
+    invalid_keys = sorted(key for key in HEADER_ONLY_KEYS if key in data)
+    if not invalid_keys:
+        return
+
+    msg = (
+        "Header-only metadata must not appear in the TOML body for "
+        f"{resolved_path}: {invalid_keys!r}"
+    )
+    raise ValueError(msg)
+
+
+def _load_global_binding(data: dict[str, Any]) -> str:
+    global_table = _require_table(data, "global")
+    return _require_str(global_table, "config_id")
+
+
+def _load_batch_size(
+    data: dict[str, Any],
+    *,
+    resolved_path: Path,
+) -> int:
     batch_size = _require_int(data, "batch_size", default=DEFAULT_BATCH_SIZE)
     if batch_size <= 0:
         msg = f"batch_size must be positive in {resolved_path}"
         raise ValueError(msg)
-    return config_id, label, description, batch_size
+    return batch_size
+
+
+def _load_firmware_binding(data: dict[str, Any]) -> str:
+    firmware_table = _require_table(data, "firmware")
+    if "config_path" in firmware_table:
+        msg = "firmware.config_path is forbidden; use firmware.config_id only."
+        raise ValueError(msg)
+    return _require_str(firmware_table, "config_id")
+
+
+def _require_mmwave_config(
+    config_id: str,
+    *,
+    catalog: ConfigCatalog | None = None,
+) -> None:
+    resolved_catalog = catalog or load_catalog()
+    resolved_catalog.require_entry(kind=ConfigKind.MMWAVE_CFG, config_id=config_id)
 
 
 def _load_capture_window_duration_s(
     data: dict[str, Any],
     *,
-    global_data: dict[str, Any],
+    global_config: CollectionGlobalConfig,
     resolved_path: Path,
 ) -> float:
-    """Load capture-window duration from profile, global config, or default."""
     duration_s = _resolve_float(
         profile_data=data,
-        global_data=global_data,
         key="capture_window_duration_s",
-        default=DEFAULT_CAPTURE_WINDOW_DURATION_SECONDS,
+        default=global_config.capture_window_duration_s,
     )
     if duration_s <= 0:
         msg = f"capture_window_duration_s must be positive in {resolved_path}"
@@ -316,15 +474,13 @@ def _load_capture_window_duration_s(
 def _load_countdown_duration_s(
     data: dict[str, Any],
     *,
-    global_data: dict[str, Any],
+    global_config: CollectionGlobalConfig,
     resolved_path: Path,
 ) -> float:
-    """Load countdown duration from profile, global config, or default."""
     duration_s = _resolve_float(
         profile_data=data,
-        global_data=global_data,
         key="countdown_duration_s",
-        default=DEFAULT_COUNTDOWN_DURATION_SECONDS,
+        default=global_config.countdown_duration_s,
     )
     if duration_s <= 0:
         msg = f"countdown_duration_s must be positive in {resolved_path}"
@@ -335,15 +491,13 @@ def _load_countdown_duration_s(
 def _load_marked_window_end_grace_s(
     data: dict[str, Any],
     *,
-    global_data: dict[str, Any],
+    global_config: CollectionGlobalConfig,
     resolved_path: Path,
 ) -> float:
-    """Load marked-window grace from profile, global config, or default."""
     grace_s = _resolve_float(
         profile_data=data,
-        global_data=global_data,
         key="marked_window_end_grace_s",
-        default=DEFAULT_MARKED_WINDOW_END_GRACE_SECONDS,
+        default=global_config.marked_window_end_grace_s,
     )
     if grace_s < 0:
         msg = f"marked_window_end_grace_s must be >= 0 in {resolved_path}"
@@ -354,15 +508,13 @@ def _load_marked_window_end_grace_s(
 def _load_end_mark_key(
     data: dict[str, Any],
     *,
-    global_data: dict[str, Any],
+    global_config: CollectionGlobalConfig,
     resolved_path: Path,
 ) -> str:
-    """Load the configured capture end-mark key."""
     end_mark_key = _resolve_str(
         profile_data=data,
-        global_data=global_data,
         key="end_mark_key",
-        default=DEFAULT_END_MARK_KEY,
+        default=global_config.end_mark_key,
     )
     if not end_mark_key:
         msg = f"end_mark_key must be non-empty in {resolved_path}"
@@ -370,24 +522,11 @@ def _load_end_mark_key(
     return end_mark_key
 
 
-def _load_firmware_binding(
-    data: dict[str, Any],
-) -> tuple[str, Path]:
-    """Load the bound mmWave cfg metadata from one profile."""
-    firmware_table = _require_table(data, "firmware")
-    firmware_config_id = _require_str(firmware_table, "config_id")
-    firmware_config_path = resolve_repo_path(
-        _require_str(firmware_table, "config_path"),
-    )
-    return firmware_config_id, firmware_config_path
-
-
 def _load_defaults(
     data: dict[str, Any],
     *,
     resolved_path: Path,
 ) -> CollectionDefaults:
-    """Load the operator-facing default values from one profile."""
     defaults_table = _require_table(data, "defaults")
     defaults = CollectionDefaults(
         hand=_require_str(defaults_table, "hand"),
@@ -403,36 +542,63 @@ def _load_defaults(
     return defaults
 
 
+def _load_global_serial_defaults(
+    data: dict[str, Any],
+    *,
+    resolved_path: Path,
+) -> CollectionSerialDefaults:
+    serial_table = _optional_table(data.get("serial"))
+    if serial_table is None:
+        return CollectionSerialDefaults(
+            cli_port=None,
+            data_port=None,
+            cli_baudrate=DEFAULT_CLI_BAUDRATE,
+            data_baudrate=DEFAULT_DATA_BAUDRATE,
+        )
+    return CollectionSerialDefaults(
+        cli_port=_optional_str(serial_table.get("cli_port")),
+        data_port=_optional_str(serial_table.get("data_port")),
+        cli_baudrate=_load_positive_int_from_table(
+            serial_table,
+            "cli_baudrate",
+            default=DEFAULT_CLI_BAUDRATE,
+            resolved_path=resolved_path,
+        ),
+        data_baudrate=_load_positive_int_from_table(
+            serial_table,
+            "data_baudrate",
+            default=DEFAULT_DATA_BAUDRATE,
+            resolved_path=resolved_path,
+        ),
+    )
+
+
 def _load_serial_defaults(
     *,
     profile_data: dict[str, Any],
-    global_data: dict[str, Any],
+    global_config: CollectionGlobalConfig,
 ) -> CollectionSerialDefaults:
-    """Load the serial strategy from the merged global/profile view."""
     profile_serial = _optional_table(profile_data.get("serial"))
-    global_serial = _optional_table(global_data.get("serial"))
     return CollectionSerialDefaults(
-        cli_port=_resolve_optional_str_from_tables(
+        cli_port=_resolve_optional_str_from_table(
             profile_table=profile_serial,
-            global_table=global_serial,
             key="cli_port",
+            default=global_config.serial.cli_port,
         ),
-        data_port=_resolve_optional_str_from_tables(
+        data_port=_resolve_optional_str_from_table(
             profile_table=profile_serial,
-            global_table=global_serial,
             key="data_port",
+            default=global_config.serial.data_port,
         ),
-        cli_baudrate=_resolve_int_from_tables(
+        cli_baudrate=_resolve_positive_int_from_table(
             profile_table=profile_serial,
-            global_table=global_serial,
             key="cli_baudrate",
-            default=DEFAULT_CLI_BAUDRATE,
+            default=global_config.serial.cli_baudrate,
         ),
-        data_baudrate=_resolve_int_from_tables(
+        data_baudrate=_resolve_positive_int_from_table(
             profile_table=profile_serial,
-            global_table=global_serial,
             key="data_baudrate",
-            default=DEFAULT_DATA_BAUDRATE,
+            default=global_config.serial.data_baudrate,
         ),
     )
 
@@ -443,18 +609,15 @@ def _load_options(
     defaults: CollectionDefaults,
     resolved_path: Path,
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """Load gestures and environments from one profile."""
     options_table = _require_table(data, "options")
-    gestures = _require_str_tuple(options_table, "gestures")
-    environments = _require_str_tuple(options_table, "environments")
-
+    gestures = _require_unique_str_tuple(options_table, "gestures")
+    environments = _require_unique_str_tuple(options_table, "environments")
     if defaults.environment not in environments:
         msg = (
             "defaults.environment must be present in options.environments for "
             f"{resolved_path}"
         )
         raise ValueError(msg)
-
     return gestures, environments
 
 
@@ -467,11 +630,8 @@ def _load_gesture_target_durations(
     marked_window_end_grace_s: float,
     resolved_path: Path,
 ) -> tuple[GestureTargetDuration, ...]:
-    """Load gesture -> target-window duration mappings from one profile."""
     durations_table = _require_table(data, "gesture_target_durations")
-    unexpected_gestures = sorted(
-        key for key in durations_table if key not in set(gestures)
-    )
+    unexpected_gestures = sorted(key for key in durations_table if key not in gestures)
     if unexpected_gestures:
         msg = (
             "gesture_target_durations contains unknown gestures "
@@ -494,9 +654,8 @@ def _load_gesture_target_durations(
             GestureTargetDuration(
                 gesture=gesture,
                 target_window_duration_s=target_duration_s,
-            ),
+            )
         )
-
     return tuple(target_durations)
 
 
@@ -509,7 +668,6 @@ def _validate_target_window_duration(
     marked_window_end_grace_s: float,
     resolved_path: Path,
 ) -> None:
-    """Validate one target-window duration against the runtime geometry."""
     if target_window_duration_s <= 0:
         msg = (
             "gesture_target_durations values must be positive for "
@@ -534,13 +692,67 @@ def _validate_target_window_duration(
         raise ValueError(msg)
 
 
+def _load_positive_float(
+    data: dict[str, Any],
+    key: str,
+    *,
+    default: float,
+    resolved_path: Path,
+) -> float:
+    value = _require_float(data, key, default=default)
+    if value <= 0:
+        msg = f"{key} must be positive in {resolved_path}"
+        raise ValueError(msg)
+    return value
+
+
+def _load_non_negative_float(
+    data: dict[str, Any],
+    key: str,
+    *,
+    default: float,
+    resolved_path: Path,
+) -> float:
+    value = _require_float(data, key, default=default)
+    if value < 0:
+        msg = f"{key} must be >= 0 in {resolved_path}"
+        raise ValueError(msg)
+    return value
+
+
+def _load_non_empty_str(
+    data: dict[str, Any],
+    key: str,
+    *,
+    default: str,
+    resolved_path: Path,
+) -> str:
+    value = _require_str(data, key) if key in data else default
+    if not value:
+        msg = f"{key} must be non-empty in {resolved_path}"
+        raise ValueError(msg)
+    return value
+
+
+def _load_positive_int_from_table(
+    data: dict[str, Any],
+    key: str,
+    *,
+    default: int,
+    resolved_path: Path,
+) -> int:
+    value = _require_int(data, key, default=default)
+    if value <= 0:
+        msg = f"{key} must be positive in {resolved_path}"
+        raise ValueError(msg)
+    return value
+
+
 def _optional_table(value: object) -> dict[str, Any] | None:
-    """Normalize one optional TOML table."""
     if value is None:
         return None
     if isinstance(value, dict):
         return value
-
     msg = "Expected table or null."
     raise ValueError(msg)
 
@@ -548,90 +760,73 @@ def _optional_table(value: object) -> dict[str, Any] | None:
 def _resolve_float(
     *,
     profile_data: dict[str, Any],
-    global_data: dict[str, Any],
     key: str,
     default: float,
 ) -> float:
-    """Resolve one numeric value from profile, global config, or default."""
     if key in profile_data:
         return _require_float(profile_data, key)
-    if key in global_data:
-        return _require_float(global_data, key)
     return default
 
 
 def _resolve_str(
     *,
     profile_data: dict[str, Any],
-    global_data: dict[str, Any],
     key: str,
     default: str,
 ) -> str:
-    """Resolve one string value from profile, global config, or default."""
     if key in profile_data:
         return _require_str(profile_data, key)
-    if key in global_data:
-        return _require_str(global_data, key)
     return default
 
 
-def _resolve_optional_str_from_tables(
+def _resolve_optional_str_from_table(
     *,
     profile_table: dict[str, Any] | None,
-    global_table: dict[str, Any] | None,
     key: str,
+    default: str | None,
 ) -> str | None:
-    """Resolve one optional string from merged table sources."""
-    if profile_table is not None and key in profile_table:
-        return _optional_str(profile_table[key])
-    if global_table is not None and key in global_table:
-        return _optional_str(global_table[key])
-    return None
+    if profile_table is None or key not in profile_table:
+        return default
+    return _optional_str(profile_table[key])
 
 
-def _resolve_int_from_tables(
+def _resolve_positive_int_from_table(
     *,
     profile_table: dict[str, Any] | None,
-    global_table: dict[str, Any] | None,
     key: str,
     default: int,
 ) -> int:
-    """Resolve one integer from merged table sources."""
-    if profile_table is not None and key in profile_table:
-        return _require_int(profile_table, key)
-    if global_table is not None and key in global_table:
-        return _require_int(global_table, key)
-    return default
+    if profile_table is None or key not in profile_table:
+        return default
+    value = _require_int(profile_table, key)
+    if value <= 0:
+        msg = f"{key} must be positive."
+        raise ValueError(msg)
+    return value
 
 
 def _require_table(data: dict[str, Any], key: str) -> dict[str, Any]:
-    """Require one TOML table by key."""
     value = data.get(key)
     if isinstance(value, dict):
         return value
-
     msg = f"Missing table {key!r}"
     raise ValueError(msg)
 
 
 def _require_str(data: dict[str, Any], key: str) -> str:
-    """Require one non-empty string by key."""
     value = data.get(key)
     if isinstance(value, str) and value.strip():
         return value.strip()
-
     msg = f"Missing string field {key!r}"
     raise ValueError(msg)
 
 
 def _optional_str(value: object) -> str | None:
-    """Normalize one optional string value."""
     if value is None:
         return None
     if isinstance(value, str):
         stripped = value.strip()
         return stripped or None
-
     msg = "Expected string or null."
     raise ValueError(msg)
 
@@ -642,16 +837,14 @@ def _require_float(
     *,
     default: float | None = None,
 ) -> float:
-    """Require one numeric field by key."""
     if key not in data:
         if default is None:
             msg = f"Missing numeric field {key!r}"
             raise ValueError(msg)
         return default
-
     value = _optional_float(data[key], allow_none=False)
     if value is None:
-        msg = f"Field {key!r} must be numeric."
+        msg = f"Missing numeric field {key!r}"
         raise ValueError(msg)
     return value
 
@@ -661,12 +854,10 @@ def _optional_float(
     *,
     allow_none: bool = True,
 ) -> float | None:
-    """Normalize one optional float value."""
     if value is None and allow_none:
         return None
     if isinstance(value, int | float):
         return float(value)
-
     msg = "Expected a numeric value."
     raise ValueError(msg)
 
@@ -677,37 +868,34 @@ def _require_int(
     *,
     default: int | None = None,
 ) -> int:
-    """Require one integer field by key."""
     if key not in data:
         if default is None:
             msg = f"Missing integer field {key!r}"
             raise ValueError(msg)
         return default
-
     value = data[key]
     if isinstance(value, int) and not isinstance(value, bool):
         return value
-
     msg = f"Expected integer field {key!r}"
     raise ValueError(msg)
 
 
-def _require_str_tuple(data: dict[str, Any], key: str) -> tuple[str, ...]:
-    """Require one non-empty string list by key."""
+def _require_unique_str_tuple(data: dict[str, Any], key: str) -> tuple[str, ...]:
     value = data.get(key)
     if not isinstance(value, list) or not value:
-        msg = f"Expected a non-empty string list for {key!r}"
+        msg = f"Expected a non-empty list of strings for {key!r}"
         raise ValueError(msg)
 
-    items = []
+    normalized: list[str] = []
+    seen: set[str] = set()
     for item in value:
         if not isinstance(item, str) or not item.strip():
-            msg = f"Expected only non-empty strings in {key!r}"
+            msg = f"Expected non-empty strings in {key!r}"
             raise ValueError(msg)
-        items.append(item.strip())
-
-    deduped_items = tuple(dict.fromkeys(items))
-    if len(deduped_items) != len(items):
-        msg = f"Duplicate values are not allowed in {key!r}"
-        raise ValueError(msg)
-    return deduped_items
+        normalized_item = item.strip()
+        if normalized_item in seen:
+            msg = f"Duplicate value {normalized_item!r} in {key!r}"
+            raise ValueError(msg)
+        seen.add(normalized_item)
+        normalized.append(normalized_item)
+    return tuple(normalized)

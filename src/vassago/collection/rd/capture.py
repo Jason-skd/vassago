@@ -19,6 +19,7 @@ from vassago.collection.rd import session as collection_session
 from vassago.collection.rd import ui as collection_ui
 from vassago.collection.rd.config import WindowRange
 from vassago.collection.rd.paths import resolve_repo_path
+from vassago.firmware.mmwave import config as mmwave_config
 from vassago.firmware.mmwave.protocol import MmwavePacketParser
 from vassago.firmware.mmwave.protocol import SmokeTestSummary
 from vassago.firmware.mmwave.protocol import summarize_packets
@@ -464,11 +465,12 @@ def _configure_radar(manifest: collection_session.JsonObject) -> None:
     firmware = _require_dict(config_snapshot, "firmware")
     serial_defaults = _require_dict(config_snapshot, "serial")
 
-    config_path = resolve_repo_path(_require_str(firmware, "config_path"))
+    config_id = _require_str(firmware, "config_id")
+    config_path = mmwave_config.get_known_config(config_id).path.resolve()
     cli_baudrate = _require_int(serial_defaults, "cli_baudrate")
     cli_port = _require_str(manifest, "cli_port")
 
-    console.print(f"state: configuring radar from {config_path}")
+    console.print(f"state: configuring radar from {config_id} ({config_path})")
     session = send_config(
         cli_port=cli_port,
         cli_baudrate=cli_baudrate,

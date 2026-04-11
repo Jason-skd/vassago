@@ -20,12 +20,13 @@
   "data_port": "/dev/cu.SLAB_USBtoUART",
   "data_baudrate": 921600,
   "config_snapshot": {
-    "schema_version": "collection_rd_config_v2",
+    "schema_version": "collection_rd_config_v3",
     "config_id": "rd_phase1_default",
-    "source_path": "configs/collection/rd/rd_phase1_default.toml",
     "label": "RD Phase 1 Default",
     "description": "Default RD collection profile for the current UART-first workflow.",
-    "batch_size": 12,
+    "global": {
+      "config_id": "rd_global_default"
+    },
     "runtime": {
       "capture_window_duration_s": 5.0,
       "countdown_duration_s": 5.0,
@@ -33,8 +34,7 @@
       "end_mark_key": "space"
     },
     "firmware": {
-      "config_id": "rd_candidate",
-      "config_path": "configs/rd_phase1_uart.cfg"
+      "config_id": "rd_candidate"
     },
     "defaults": {
       "hand": "right",
@@ -68,8 +68,7 @@
       "swipe_right": 1.6,
       "push": 1.8,
       "pull": 1.8
-    },
-    "global_source_path": "rd.toml"
+    }
   },
   "takes": [
     {

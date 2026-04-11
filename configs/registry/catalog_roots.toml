@@ -1,0 +1,17 @@
+schema_version = "config_catalog_roots_v1"
+
+[[root]]
+kind = "mmwave_cfg"
+glob = "configs/firmware/mmwave/**/*.cfg"
+
+[[root]]
+kind = "collection_rd_global"
+glob = "configs/collection/rd/global.toml"
+
+[[root]]
+kind = "collection_rd_profile"
+glob = "configs/collection/rd/profiles/*.toml"
+
+[[root]]
+kind = "collection_rd_profile"
+glob = "configs/collection/rd/templates/*.toml"

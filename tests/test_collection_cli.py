@@ -20,7 +20,6 @@ def test_collection_list_configs_command_renders_sample_profile(
     monkeypatch,
 ) -> None:
     config_path = tmp_path / "cfg_short.toml"
-    firmware_path = tmp_path / "rd.cfg"
     monkeypatch.setattr(
         "vassago.collection.rd.cli.collection_config.list_collection_profiles",
         lambda: [
@@ -29,9 +28,9 @@ def test_collection_list_configs_command_renders_sample_profile(
                 path=config_path,
                 label="Short",
                 description="Short description",
+                global_config_id="rd_global_default",
                 batch_size=1,
                 firmware_config_id="rd_candidate",
-                firmware_config_path=firmware_path,
                 defaults=collection_config.CollectionDefaults(
                     hand="right",
                     distance_m=0.5,

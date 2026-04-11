@@ -10,6 +10,9 @@ pre-commit:
       run: uv run ruff check --fix {staged_files}
       stage_fixed: true
 
+    config-check:
+      run: uv run python -m vassago.configs.validation
+
     typecheck:
       glob: "*.py"
       run: uv run pyright

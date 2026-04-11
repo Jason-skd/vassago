@@ -39,7 +39,7 @@ def render_collection_profiles(
     table.add_column("Label")
     table.add_column("Batch Size", justify="right")
     table.add_column("Capture", justify="right")
-    table.add_column("Cfg Path")
+    table.add_column("Firmware Config")
     table.add_column("Description")
 
     for profile in profiles:
@@ -48,7 +48,7 @@ def render_collection_profiles(
             profile.label,
             str(profile.batch_size),
             f"{profile.capture_window_duration_s:.2f}s",
-            str(profile.firmware_config_path),
+            profile.firmware_config_id,
             profile.description,
         )
 
@@ -203,7 +203,7 @@ def prompt_for_collection_profile(
             questionary.Choice(
                 title=(
                     f"{profile.label} [{profile.config_id}] "
-                    f"batch={profile.batch_size} cfg={profile.firmware_config_path}"
+                    f"batch={profile.batch_size} fw={profile.firmware_config_id}"
                 ),
                 value=profile,
             )

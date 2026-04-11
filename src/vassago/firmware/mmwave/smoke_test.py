@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import serial
 
+from vassago.firmware.mmwave.cfg import load_cfg_lines
 from vassago.firmware.mmwave.ports import SerialPortInfo
 from vassago.firmware.mmwave.ports import list_candidate_mmwave_ports
 from vassago.firmware.mmwave.ports import list_serial_ports
@@ -90,13 +91,7 @@ class PortProbeResult:
 
 def load_config_lines(config_path: Path) -> list[str]:
     """Load non-empty cfg lines, skipping comment-only lines."""
-    lines: list[str] = []
-    for raw_line in config_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith(("%", "#")):
-            continue
-        lines.append(line)
-    return lines
+    return load_cfg_lines(config_path)
 
 
 def send_config(

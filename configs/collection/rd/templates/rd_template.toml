@@ -1,18 +1,20 @@
-# Example round profile for one RD collection campaign.
-#
-# Merge intent:
-# - Repository root `rd.toml` provides stable baseline defaults.
-# - This round profile defines business logic for the current campaign.
-# - A checker may allow overriding some global fields here and emit WARNs.
-
-schema_version = "collection_rd_profile_v2_draft"
-config_id = "rd_round_template"
-label = "RD Round Template"
-description = "Example round profile for one RD collection campaign."
+# --- vassago:meta ---
+# config_kind = "collection_rd_profile"
+# config_id = "rd_profile_template"
+# label = "RD Profile Template"
+# description = "Template for authoring RD collection round profiles."
+# lifecycle = "template"
+# ---
+schema_version = "collection_rd_profile_v2"
 batch_size = 12
 
+[global]
+config_id = "rd_global_default"
+
+[firmware]
+config_id = "rd_candidate"
+
 # Optional overrides for repository-level defaults.
-# A future checker can warn when these diverge from `rd.toml`.
 # capture_window_duration_s = 5.0
 # countdown_duration_s = 5.0
 # marked_window_end_grace_s = 0.30
@@ -22,10 +24,6 @@ batch_size = 12
 # [serial]
 # cli_baudrate = 115200
 # data_baudrate = 921600
-
-[firmware]
-config_id = "rd_candidate"
-config_path = "configs/rd_phase1_uart.cfg"
 
 [defaults]
 hand = "right"
