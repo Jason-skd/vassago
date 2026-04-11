@@ -142,9 +142,9 @@ TOML 配置入口和 manifest snapshot 原则，但当前第一版实现仍保�
 - 全局配置的职责是提供仓库级 baseline
 - 单轮 profile 的职责是表达本轮采集意图
 
-因此不再优先追求“多层目录递归叠加的采集计划复用”，而是先固定为：
+因此不再优先追求“多层目录递归叠加的采集计划复用”，而是固定为：
 
-- 仓库根的全局 `rd.toml`
+- `configs/collection/rd/global.toml`
 - 单轮采集 profile
 
 两层即可。
@@ -302,7 +302,7 @@ TOML 配置入口和 manifest snapshot 原则，但当前第一版实现仍保�
 
 ## Next Actions
 
-1. 定义全局 `rd.toml` 的 schema
+1. 定义 `configs/collection/rd/global.toml` 的 schema
 2. 定义 round profile 相对于全局 baseline 的 merge 规则
 3. 删除 `speed` 并改写 `gesture -> target_window_duration_s` 配置结构
 4. 重新定义 take attempt 的运行时窗口生成逻辑
@@ -326,7 +326,7 @@ TOML 配置入口和 manifest snapshot 原则，但当前第一版实现仍保�
 
 尚未真正实现：
 
-- 全局 `rd.toml`
+- `configs/collection/rd/global.toml`
 - 运行时随机 `capture_window` 放置逻辑
 - 最小 `quick QC` 原型
 - live capture 态与终端输入能力重构
