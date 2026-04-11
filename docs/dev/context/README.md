@@ -61,7 +61,7 @@ YYYYMMDD_<scope>_<topic>.md
 
 可直接参考模板：
 
-- [_template.md](/Users/skd/Documents/vscode-projects/vassago/docs/dev/context/_template.md)
+- [_template.md](_template.md)
 
 ## 与 commit log 的关系
 

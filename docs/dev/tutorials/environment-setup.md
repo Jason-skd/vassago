@@ -6,9 +6,9 @@
 
 在正式开始环境配置前，建议先阅读：
 
-- [README.md](/Users/skd/Documents/vscode-projects/vassago/README.md)
-- [docs/dev/README.md](/Users/skd/Documents/vscode-projects/vassago/docs/dev/README.md)
-- [development-workflow.md](/Users/skd/Documents/vscode-projects/vassago/docs/dev/tutorials/development-workflow.md)
+- [README.md](../../../README.md)
+- [../README.md](../README.md)
+- [development-workflow.md](development-workflow.md)
 
 建议先熟悉下面这些日常高频命令。
 

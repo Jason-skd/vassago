@@ -18,9 +18,9 @@
 当前仓库内置了两个可直接使用的 `cfg`：
 
 - `baseline_pointcloud`
-  推荐优先使用的低风险基线配置，对应 [configs/profile_3d.cfg](/Users/skd/Documents/vscode-projects/vassago/configs/profile_3d.cfg)
+  推荐优先使用的低风险基线配置，对应 [../../../configs/firmware/mmwave/baseline_pointcloud.cfg](../../../configs/firmware/mmwave/baseline_pointcloud.cfg)
 - `rd_candidate`
-  风险较高的候选配置，对应 [configs/rd_phase1_uart.cfg](/Users/skd/Documents/vscode-projects/vassago/configs/rd_phase1_uart.cfg)
+  风险较高的候选配置，对应 [../../../configs/firmware/mmwave/rd_candidate.cfg](../../../configs/firmware/mmwave/rd_candidate.cfg)
 
 ## 2. 推荐操作流程
 
@@ -172,17 +172,31 @@ uv run vassago firmware mmwave smoke-test
 - 板卡是否真的已经启动到会持续输出数据的状态
 - 当前 `cfg` 是否已经成功下发
 
-## 7. 一条最短可执行路径
+### 情况 4：上传 `cfg` 时卡在 `sensorStart`，并出现下面这类输出
 
-如果你只想先验证“这块板子现在能不能出包”，直接按下面三条命令做：
-
-```bash
-uv run vassago firmware mmwave probe-ports
-uv run vassago firmware mmwave smoke-test --config-id baseline_pointcloud --cli-port /dev/ttyXXX --data-port /dev/ttyYYY --no-interactive
-echo $?
+```text
+cli> sensorStart
+cli: sensorStart
+cli: Exception: ../main.c, line 2036.
+Config failed before data capture.
+failed_command: sensorStart
 ```
 
-最后一个命令如果输出 `0`，说明这次 smoke test 通过。
+如果你遇到的是这一类 `sensorStart` 异常，当前已知有效处理方式只有一件事：
+
+- 多次、彻底重启固件 / 板卡，再重新开始
+
+这里的“彻底重启”指的是：
+
+- 断电或重新上电，不是在当前上电状态里直接重跑同一条命令
+- 让板卡和串口状态完整回到初始状态后，再重新执行 `probe-ports`
+- 必要时先用 `baseline_pointcloud` 重新确认基线链路，再回到目标 `cfg`
+
+对这一类问题，当前没有其他已经验证有效的解决方案。不要把时间浪费在：
+
+- 在同一次上电状态里连续重试几十次
+- 猜测某一条 `cfg` 命令的小改动就能立刻修好
+- 在端口状态还没恢复时继续反复跑 `smoke-test`
 
 如果你的机器遇到 `uv` 缓存目录权限问题，可以临时改用：
 

@@ -23,14 +23,14 @@
 
 这些内容应放到：
 
-- [docs/dev/README.md](/Users/skd/Documents/vscode-projects/vassago/docs/dev/README.md)
-- [docs/dev/context/README.md](/Users/skd/Documents/vscode-projects/vassago/docs/dev/context/README.md)
+- [../dev/README.md](../dev/README.md)
+- [../dev/context/README.md](../dev/context/README.md)
 
 ## 子目录
 
-- [tutorials/README.md](/Users/skd/Documents/vscode-projects/vassago/docs/collaborators/tutorials/README.md)
+- [tutorials/README.md](tutorials/README.md)
   面向协作者的操作教程与 SOP。
-- [meetings/README.md](/Users/skd/Documents/vscode-projects/vassago/docs/collaborators/meetings/README.md)
+- [meetings/README.md](meetings/README.md)
   会议纪要与协作讨论记录。
 
 ## 写作要求

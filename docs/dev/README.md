@@ -13,16 +13,24 @@
 
 如果你准备修改仓库结构、开发工作流、核心模块或关键文档，请先按顺序阅读：
 
-1. [tutorials/README.md](/Users/skd/Documents/vscode-projects/vassago/docs/dev/tutorials/README.md)
-2. [tutorials/development-workflow.md](/Users/skd/Documents/vscode-projects/vassago/docs/dev/tutorials/development-workflow.md)
-3. [context/README.md](/Users/skd/Documents/vscode-projects/vassago/docs/dev/context/README.md)
-4. `docs/dev/context/` 下与你当前任务直接相关、且由用户明确要求保留的 context 文件
+1. [tutorials/README.md](tutorials/README.md)
+2. [tutorials/development-workflow.md](tutorials/development-workflow.md)
+3. [tutorials/reusable-code-index.md](tutorials/reusable-code-index.md)
+4. [context/README.md](context/README.md)
+5. `docs/dev/context/` 下与你当前任务直接相关、且由用户明确要求保留的 context 文件
+
+其中最重要的两份 AI 规范是：
+
+- [tutorials/development-workflow.md](tutorials/development-workflow.md)
+  约束工作流、提交边界和 checkpoint。
+- [tutorials/reusable-code-index.md](tutorials/reusable-code-index.md)
+  约束优先复用已有模块，避免平行复制逻辑和继续堆积难维护代码。
 
 ## Directory Guide
 
-- [tutorials/README.md](/Users/skd/Documents/vscode-projects/vassago/docs/dev/tutorials/README.md)
+- [tutorials/README.md](tutorials/README.md)
   稳定、可重复执行的开发规范与教程。
-- [context/README.md](/Users/skd/Documents/vscode-projects/vassago/docs/dev/context/README.md)
+- [context/README.md](context/README.md)
   用户确认保留的关键调查、分析和决策留痕。
 
 ## Rules

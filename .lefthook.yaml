@@ -20,3 +20,6 @@ pre-commit:
     test:
       glob: "*.py"
       run: uv run pytest --testmon || [ $? -eq 5 ]  # 5 是 pytest 在没有测试文件时返回的退出代码
+
+    code-stats:
+      run: scc --ci src scripts docs

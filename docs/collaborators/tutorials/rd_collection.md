@@ -24,7 +24,7 @@
 
 如果你还没有完成板卡联调，请先阅读：
 
-- [mmwave_smoke_test.md](/Users/skd/Documents/vscode-projects/vassago/docs/collaborators/tutorials/mmwave_smoke_test.md)
+- [mmwave_smoke_test.md](mmwave_smoke_test.md)
 
 ## 2. 先确认 collection profile
 
@@ -37,13 +37,13 @@ uv run vassago collection rd list-configs
 当前仓库内置的默认 profile 是：
 
 - `rd_phase1_default`
-  对应 [rd_phase1_default.toml](/Users/skd/Documents/vscode-projects/vassago/configs/collection/rd/rd_phase1_default.toml)
+  对应 [../../../configs/collection/rd/profiles/rd_phase1_default.toml](../../../configs/collection/rd/profiles/rd_phase1_default.toml)
 
 当前配置分成两层：
 
-- 仓库级 baseline：[`rd.toml`](/Users/skd/Documents/vscode-projects/vassago/rd.toml)
+- 仓库级 baseline：[`global.toml`](../../../configs/collection/rd/global.toml)
   提供固定倒计时、采集窗口、结束键、串口默认波特率等稳定参数。
-- 单轮采集 profile：[`rd_phase1_default.toml`](/Users/skd/Documents/vscode-projects/vassago/configs/collection/rd/rd_phase1_default.toml)
+- 单轮采集 profile：[`rd_phase1_default.toml`](../../../configs/collection/rd/profiles/rd_phase1_default.toml)
   提供本轮动作列表、环境列表、默认手别/距离/角度，以及每个 `gesture` 的 `target_window_duration_s`。
 
 对协作者最重要的是：
@@ -165,7 +165,7 @@ uv run vassago collection rd list-sessions
 - `marked_window.start_s` 也会自动跟着开始
 - 你只需要在动作结束时按一次结束键
 
-默认结束键来自 [`rd.toml`](/Users/skd/Documents/vscode-projects/vassago/rd.toml)，当前默认是：
+默认结束键来自 [`global.toml`](../../../configs/collection/rd/global.toml)，当前默认是：
 
 - `space`
 

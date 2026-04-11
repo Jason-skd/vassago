@@ -6,9 +6,9 @@
 
 ## 阅读入口
 
-- [docs/dev/README.md](/Users/skd/Documents/vscode-projects/vassago/docs/dev/README.md)
+- [dev/README.md](dev/README.md)
   面向开发者和 AI 的工程文档入口。
-- [docs/collaborators/README.md](/Users/skd/Documents/vscode-projects/vassago/docs/collaborators/README.md)
+- [collaborators/README.md](collaborators/README.md)
   面向协作者的操作与协作文档入口。
 
 ## 写作规则
