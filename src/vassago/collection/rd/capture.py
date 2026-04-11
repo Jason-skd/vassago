@@ -45,6 +45,14 @@ type TerminalAttributes = (
 console = Console()
 CAPTURE_LOOP_SLEEP_SECONDS = 0.01
 CAPTURE_POLL_TIMEOUT_SECONDS = 0.05
+GO_PROMPT_STYLE = "bold white on #0f9d58"
+COUNTDOWN_NUMBER_STYLES = (
+    "bold #38bdf8",
+    "bold #84cc16",
+    "bold #facc15",
+    "bold #fb923c",
+    "bold #ef4444",
+)
 SYSTEM_RANDOM = random.SystemRandom()
 
 
@@ -314,7 +322,7 @@ def capture_take(
 
                 if not go_announced and now >= go_at:
                     go_announced = True
-                    console.print("GO")
+                    _render_go_prompt()
 
                 if capture_started:
                     capture_elapsed_s = min(
@@ -356,6 +364,25 @@ def capture_take(
         target_window=attempt_plan.target_window,
         marked_window=marked_window,
     )
+
+
+def _render_go_prompt() -> None:
+    """Render a clear GO cue without adding extra layout noise."""
+    console.print(" GO ", style=GO_PROMPT_STYLE)
+
+
+def _render_countdown_tick(visible_value: int) -> None:
+    """Render a simple countdown line with only the number color changing."""
+    console.print(
+        f"countdown: [{_countdown_number_style(visible_value)}]{visible_value}[/]"
+    )
+
+
+def _countdown_number_style(visible_value: int) -> str:
+    """Return the numeric highlight color for the visible countdown second."""
+    clamped_value = min(len(COUNTDOWN_NUMBER_STYLES), max(1, visible_value))
+    style_index = len(COUNTDOWN_NUMBER_STYLES) - clamped_value
+    return COUNTDOWN_NUMBER_STYLES[style_index]
 
 
 def summarize_raw_capture(raw_capture: bytes) -> SmokeTestSummary:
@@ -455,7 +482,7 @@ def _emit_countdown_tick(
 
     visible_value = math.ceil(remaining_s)
     if visible_value != last_countdown_value:
-        console.print(f"countdown: {visible_value}")
+        _render_countdown_tick(visible_value)
     return visible_value
 
 
