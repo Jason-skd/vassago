@@ -6,7 +6,7 @@
 # lifecycle = "active"
 # ---
 schema_version = "collection_rd_profile_v2"
-batch_size = 12
+batch_size = 80
 
 [global]
 config_id = "rd_global_default"
@@ -23,11 +23,10 @@ radar_id = "rd_aop_01"
 firmware_id = "rd_phase1_uart"
 
 [options]
-gestures = ["swipe_left", "swipe_right", "push", "pull"]
-environments = ["office_lab", "meeting_room", "hallway"]
+gestures = ["wave", "circle_cw", "flip"]
+environments = ["office_lab"]
 
 [gesture_target_durations]
-swipe_left = 1.6
-swipe_right = 1.6
-push = 1.8
-pull = 1.8
+wave = 2.0
+circle_cw = 2.0
+flip = 1.2
