@@ -29,3 +29,5 @@
   `configs` 相关命令指南，覆盖文件发现、配置消费与全量验证。
 - [collection-toml-authoring.md](collection-toml-authoring.md)
   RD collection profile TOML 编写说明书。
+- [collection-qc-guide.md](collection-qc-guide.md)
+  RD collection 的 `quick_qc`、`metadata_qc`、`offline-qc` 使用与排障说明。

@@ -395,6 +395,49 @@
 - peer-style `QcReport` 结果，用于后续 `offline_qc`
 - live collection 当前仍在用的 `QuickQcDecision` 兼容层
 
+### [src/vassago/collection/rd/metadata_qc.py](../../../src/vassago/collection/rd/metadata_qc.py)
+
+优先复用场景：
+
+- 需要校验 manifest top-level public contract
+- 需要校验 take-level contract 是否完整
+- 需要校验 top-level 和 `config_snapshot` 的 mirror / membership / default 对照关系
+
+优先复用的函数与常量：
+
+- `run_metadata_qc()`
+- `CODE_MISSING_FIELD`
+- `CODE_INVALID_FIELD`
+- `CODE_TAKE_COUNT_MISMATCH`
+- `CODE_SNAPSHOT_MISMATCH`
+- `CODE_MEMBERSHIP_VIOLATION`
+
+最重要的原则：
+
+- 不要在别处再平行写一套 manifest contract validator
+- top-level 与 snapshot 的合规关系优先沿用这里的实现和 `qc_contract` 常量
+
+### [src/vassago/collection/rd/offline_qc.py](../../../src/vassago/collection/rd/offline_qc.py)
+
+优先复用场景：
+
+- 需要对一个 session manifest 跑完整离线 QC
+- 需要把多个 peer checks 聚合为一个 `QcReport`
+- 需要对 accepted takes 重放 live `quick_qc`
+
+优先复用的函数与常量：
+
+- `run_offline_qc()`
+- `run_offline_qc_context()`
+- `run_offline_quick_qc()`
+- `CODE_MISSING_REPLAY_INPUT`
+- `CODE_RAW_UART_NOT_FOUND`
+
+最重要的原则：
+
+- `offline_qc` 是 orchestrator，不是随手堆规则的地方
+- 新的离线 QC 检查优先按 peer check 接入，而不是把逻辑全塞进 CLI
+
 ### [src/vassago/collection/rd/qc_contract.py](../../../src/vassago/collection/rd/qc_contract.py)
 
 优先复用场景：
@@ -488,6 +531,8 @@
   看 session manifest 的初始化和查询怎么用。
 - [tests/test_collection_quick_qc.py](../../../tests/test_collection_quick_qc.py)
   看 quick QC 的共享检查和 live 兼容层怎么用。
+- [tests/test_collection_offline_qc.py](../../../tests/test_collection_offline_qc.py)
+  看 metadata QC、offline quick-QC replay 和 `offline-qc` CLI 怎么用。
 - [tests/test_collection_cli.py](../../../tests/test_collection_cli.py)
   看 CLI 如何薄层接线到库层模块。
 
@@ -509,6 +554,10 @@
   先看 `collection.rd.session`
 - “做最小 quick QC”
   先看 `collection.rd.quick_qc`
+- “跑完整离线 QC”
+  先看 `collection.rd.offline_qc`
+- “校验 manifest contract / snapshot 对照关系”
+  先看 `collection.rd.metadata_qc`
 - “定义 collection QC finding / report / manifest contract”
   先看 `collection.rd.qc_contract`
 - “给 CLI 加交互”

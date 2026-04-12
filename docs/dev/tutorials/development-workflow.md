@@ -142,3 +142,25 @@ AI 当被要求制定实施计划时, 需要主动分析是否有可以用上现
 - 使用了什么豁免
 - 具体位于哪个文件
 - 为什么不能直接通过更清晰的代码或类型建模解决
+
+## 11. Codex 的 Git 提权规则
+
+在 Codex 沙箱里，`git add` 和 `git commit` 通常会被拦截。
+
+因此当任务明确要求：
+
+- stage 文件
+- 创建 commit
+- 改写尚未 push 的本地 commit message
+
+正确做法是：
+
+- 直接为对应 git 命令申请提权
+- 使用非交互 git 命令
+- 在真正执行 `git commit` 前，先确认 commit message 已符合 conventional commit
+
+不要做的事：
+
+- 先假设 `git add` / `git commit` 能直接通过
+- 因为沙箱限制去改用更绕的临时方案
+- 在已经知道需要写 `.git/` 的情况下，先做一轮明知会失败的 plain-text 追问
