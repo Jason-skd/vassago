@@ -17,7 +17,7 @@ config_id = "rd_candidate"
 [defaults]
 hand = "right"
 distance_m = 0.5
-angle_deg = 0.0
+angle_deg = 180.0
 environment = "office_lab"
 radar_id = "rd_aop_01"
 firmware_id = "rd_phase1_uart"
