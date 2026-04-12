@@ -1,0 +1,9 @@
+schema_version = "mmwave_cfg_integrity_v1"
+
+[[cfg]]
+config_id = "baseline_pointcloud"
+sha256 = "bbc1089015155234fdf68d22741439fc82073432eca16ac41682ce92f7be1f76"
+
+[[cfg]]
+config_id = "rd_candidate"
+sha256 = "0b16b99f383ffaee654ca08007250de8f01584dee12fa0269fc71f8c9781621c"

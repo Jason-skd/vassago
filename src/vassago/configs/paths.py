@@ -8,6 +8,7 @@ CONFIGS_ROOT = Path("configs")
 REGISTRY_ROOT = CONFIGS_ROOT / "registry"
 CATALOG_ROOTS_PATH = REGISTRY_ROOT / "catalog_roots.toml"
 MMWAVE_CFG_COMMANDS_PATH = REGISTRY_ROOT / "mmwave_cfg_commands.toml"
+MMWAVE_CFG_INTEGRITY_PATH = REGISTRY_ROOT / "mmwave_cfg_integrity.toml"
 
 
 def repo_root() -> Path:

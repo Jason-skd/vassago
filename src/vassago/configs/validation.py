@@ -2,45 +2,44 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from vassago.collection.rd import config as rd_config
 from vassago.configs.catalog import ConfigCatalog
 from vassago.configs.catalog import clear_catalog_cache
 from vassago.configs.catalog import discover_paths
 from vassago.configs.catalog import load_root_specs
-from vassago.configs.metadata import HEADER_ONLY_KEYS
+from vassago.configs.checks import DEFAULT_CONFIG_VALIDATION_CHECKS
 from vassago.configs.metadata import parse_metadata_header
+from vassago.configs.mmwave_cfg_integrity import clear_mmwave_cfg_integrity_cache
 from vassago.configs.models import CatalogEntry
 from vassago.configs.models import ConfigKind
-from vassago.configs.models import ConfigLifecycle
-from vassago.configs.models import ValidationIssue
 from vassago.configs.models import ValidationLevel
 from vassago.configs.paths import CATALOG_ROOTS_PATH
 from vassago.configs.paths import resolve_repo_path
 from vassago.configs.paths import to_repo_relative_path
-from vassago.firmware.mmwave import config_validation as mmwave_config_validation
+from vassago.configs.validation_contract import ConfigValidationCheck
+from vassago.configs.validation_contract import ValidationContext
+from vassago.configs.validation_contract import ValidationMessage
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from collections.abc import Sequence
     from pathlib import Path
 
 
-@dataclass(slots=True, frozen=True)
-class ValidationMessage:
-    """One config validation result row."""
-
-    level: ValidationLevel
-    path: Path
-    message: str
-
-
-def validate_all_configs() -> list[ValidationMessage]:
+def validate_all_configs(
+    *,
+    checks: Sequence[ConfigValidationCheck] | None = None,
+) -> list[ValidationMessage]:
     """Run metadata and kind-specific validation across the config tree."""
     clear_catalog_cache()
+    clear_mmwave_cfg_integrity_cache()
     metadata_messages, catalog = _run_metadata_stage()
-    semantic_messages = _run_semantic_stage(catalog=catalog)
+    validation_context = ValidationContext(catalog=catalog)
+    semantic_messages = _run_validation_checks(
+        validation_context,
+        checks=checks or DEFAULT_CONFIG_VALIDATION_CHECKS,
+    )
     return [*metadata_messages, *semantic_messages]
 
 
@@ -97,9 +96,6 @@ def _run_metadata_stage() -> tuple[list[ValidationMessage], ConfigCatalog]:
     valid_entries = [
         entry for entry in parsed_entries if entry.config_id not in duplicate_entries
     ]
-    for entry in valid_entries:
-        messages.extend(_validate_entry_location(entry))
-
     return messages, ConfigCatalog(entries=tuple(valid_entries))
 
 
@@ -151,119 +147,16 @@ def _find_duplicate_ids(
     }
 
 
-def _run_semantic_stage(catalog: ConfigCatalog) -> list[ValidationMessage]:
-    """Run per-kind semantic checks after metadata headers are valid."""
-    messages: list[ValidationMessage] = []
-    for entry in catalog.entries:
-        messages.extend(_validate_entry_semantics(entry, catalog=catalog))
-    return messages
-
-
-def _validate_entry_semantics(
-    entry: CatalogEntry,
+def _run_validation_checks(
+    context: ValidationContext,
     *,
-    catalog: ConfigCatalog,
+    checks: Sequence[ConfigValidationCheck],
 ) -> list[ValidationMessage]:
-    """Validate one discovered entry using shared and kind-specific checks."""
-    messages = _validate_header_only_metadata_usage(entry)
-    if any(message.level == ValidationLevel.ERROR for message in messages):
-        return messages
-
-    try:
-        if entry.kind == ConfigKind.MMWAVE_CFG:
-            messages.extend(
-                _wrap_issues(
-                    entry.path,
-                    mmwave_config_validation.validate_cfg(
-                        entry.path,
-                        metadata=entry.metadata,
-                    ),
-                )
-            )
-        elif entry.kind == ConfigKind.COLLECTION_RD_GLOBAL:
-            rd_config.load_collection_global_config(path=entry.path, catalog=catalog)
-        elif entry.kind == ConfigKind.COLLECTION_RD_PROFILE:
-            rd_config.load_collection_profile(entry.path, catalog=catalog)
-    except Exception as exc:  # noqa: BLE001
-        messages.append(
-            ValidationMessage(
-                level=ValidationLevel.ERROR,
-                path=entry.path,
-                message=str(exc),
-            )
-        )
-
-    return messages
-
-
-def _validate_entry_location(entry: CatalogEntry) -> list[ValidationMessage]:
-    """Warn when lifecycle and directory role disagree."""
-    path_text = entry.path.as_posix()
+    """Run the selected peer checks against the discovered config catalog."""
     messages: list[ValidationMessage] = []
-    if entry.lifecycle == ConfigLifecycle.TEMPLATE and "/templates/" not in path_text:
-        messages.append(
-            ValidationMessage(
-                level=ValidationLevel.WARN,
-                path=entry.path,
-                message=(
-                    "Template lifecycle config should live under a templates directory."
-                ),
-            )
-        )
-    if entry.lifecycle == ConfigLifecycle.ACTIVE and "/templates/" in path_text:
-        messages.append(
-            ValidationMessage(
-                level=ValidationLevel.WARN,
-                path=entry.path,
-                message=(
-                    "Active lifecycle config should not live under a templates "
-                    "directory."
-                ),
-            )
-        )
+    for check in checks:
+        messages.extend(check(context))
     return messages
-
-
-def _validate_header_only_metadata_usage(
-    entry: CatalogEntry,
-) -> list[ValidationMessage]:
-    """Reject body keys that must live only in the structured header."""
-    if entry.path.suffix != ".toml":
-        return []
-
-    try:
-        data = rd_config.load_raw_toml(entry.path)
-    except Exception as exc:  # noqa: BLE001
-        return [
-            ValidationMessage(
-                level=ValidationLevel.ERROR,
-                path=entry.path,
-                message=str(exc),
-            )
-        ]
-
-    invalid_keys = sorted(key for key in HEADER_ONLY_KEYS if key in data)
-    if not invalid_keys:
-        return []
-
-    return [
-        ValidationMessage(
-            level=ValidationLevel.ERROR,
-            path=entry.path,
-            message=(
-                "Header-only metadata keys must not appear in the TOML body: "
-                f"{invalid_keys!r}"
-            ),
-        )
-    ]
-
-
-def _wrap_issues(path: Path, issues: list[ValidationIssue]) -> list[ValidationMessage]:
-    """Attach the source path to kind-specific validation issues."""
-    return [
-        ValidationMessage(level=issue.level, path=path, message=issue.message)
-        for issue in issues
-    ]
 
 
 def _print_messages(messages: Iterable[ValidationMessage]) -> int:
