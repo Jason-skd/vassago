@@ -234,6 +234,7 @@ def _run_take_loop(
 
             qc_decision = quick_qc.evaluate_capture(
                 summary=summary,
+                capture_window=capture_result.capture_window,
                 target_window=capture_result.target_window,
                 marked_window=capture_result.marked_window,
                 marked_window_end_grace_s=(

@@ -6,6 +6,8 @@ from vassago.collection.rd import session as collection_session
 
 def test_initialize_session_persists_manifest_with_config_snapshot(tmp_path) -> None:
     profile = collection_config.get_collection_profile("rd_phase1_default")
+    selected_gesture = profile.gestures[0]
+    selected_environment = profile.defaults.environment
 
     manifest_path, manifest = collection_session.initialize_session(
         session_input=collection_session.SessionInitInput(
@@ -14,12 +16,12 @@ def test_initialize_session_persists_manifest_with_config_snapshot(tmp_path) -> 
             hand="right",
             distance_m=0.5,
             angle_deg=0.0,
-            environment="office_lab",
+            environment=selected_environment,
             operator_name="operator_a",
             note="pilot",
             radar_id="radar_01",
             firmware_id="fw_01",
-            gesture="swipe_left",
+            gesture=selected_gesture,
             cli_port="/dev/cli",
             data_port="/dev/data",
             data_baudrate=921_600,
@@ -49,6 +51,8 @@ def test_initialize_session_persists_manifest_with_config_snapshot(tmp_path) -> 
 
 def test_list_unfinished_sessions_returns_pending_manifest(tmp_path) -> None:
     profile = collection_config.get_collection_profile("rd_phase1_default")
+    selected_gesture = profile.gestures[0]
+    selected_environment = profile.defaults.environment
     collection_session.initialize_session(
         session_input=collection_session.SessionInitInput(
             profile=profile,
@@ -56,12 +60,12 @@ def test_list_unfinished_sessions_returns_pending_manifest(tmp_path) -> None:
             hand="right",
             distance_m=0.5,
             angle_deg=0.0,
-            environment="office_lab",
+            environment=selected_environment,
             operator_name="operator_a",
             note=None,
             radar_id="radar_01",
             firmware_id="fw_01",
-            gesture="swipe_left",
+            gesture=selected_gesture,
             cli_port="/dev/cli",
             data_port="/dev/data",
             data_baudrate=921_600,
@@ -73,5 +77,5 @@ def test_list_unfinished_sessions_returns_pending_manifest(tmp_path) -> None:
 
     assert len(summaries) == 1
     assert summaries[0].subject_name == "alice"
-    assert summaries[0].gesture == "swipe_left"
-    assert summaries[0].remaining_take_count == 12
+    assert summaries[0].gesture == selected_gesture
+    assert summaries[0].remaining_take_count == profile.batch_size

@@ -68,6 +68,7 @@ def test_collection_list_configs_command_renders_sample_profile(
 
 
 def test_collection_init_session_command_writes_manifest(tmp_path) -> None:
+    profile = collection_config.get_collection_profile("rd_phase1_default")
     result = runner.invoke(
         app,
         [
@@ -79,9 +80,9 @@ def test_collection_init_session_command_writes_manifest(tmp_path) -> None:
             "--subject-name",
             "alice",
             "--gesture",
-            "swipe_left",
+            profile.gestures[0],
             "--environment",
-            "office_lab",
+            profile.defaults.environment,
             "--operator-name",
             "operator_a",
             "--radar-id",
@@ -122,7 +123,7 @@ def test_interactive_init_session_prompts_operator_name_without_default(
     )
     monkeypatch.setattr(
         "vassago.collection.rd.cli._resolve_gesture",
-        lambda **_kwargs: "swipe_left",
+        lambda **_kwargs: profile.gestures[0],
     )
     monkeypatch.setattr(
         "vassago.collection.rd.cli._resolve_ports",
@@ -184,6 +185,8 @@ def test_interactive_init_session_prompts_operator_name_without_default(
 
 def test_run_session_accepts_take_and_updates_manifest(tmp_path, monkeypatch) -> None:
     profile = collection_config.get_collection_profile("rd_phase1_default")
+    selected_gesture = profile.gestures[0]
+    selected_environment = profile.defaults.environment
     manifest_path, manifest = collection_session.initialize_session(
         session_input=collection_session.SessionInitInput(
             profile=profile,
@@ -191,12 +194,12 @@ def test_run_session_accepts_take_and_updates_manifest(tmp_path, monkeypatch) ->
             hand="right",
             distance_m=0.5,
             angle_deg=0.0,
-            environment="office_lab",
+            environment=selected_environment,
             operator_name="operator_a",
             note=None,
             radar_id="radar_01",
             firmware_id="fw_01",
-            gesture="swipe_left",
+            gesture=selected_gesture,
             cli_port="/dev/cli",
             data_port="/dev/data",
             data_baudrate=921_600,
