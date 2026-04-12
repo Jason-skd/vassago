@@ -43,6 +43,10 @@ def test_initialize_session_persists_manifest_with_config_snapshot(tmp_path) -> 
     assert manifest["schema_version"] == collection_session.SESSION_SCHEMA_VERSION
     assert loaded_manifest["subject_name"] == "alice"
     assert loaded_manifest["config_id"] == "rd_phase1_default"
+    assert loaded_manifest["batch_size"] == profile.batch_size
+    assert loaded_manifest["gesture_options"] == list(profile.gestures)
+    assert loaded_manifest["environment_options"] == list(profile.environments)
+    assert config_snapshot["batch_size"] == profile.batch_size
     assert firmware["config_id"] == "rd_candidate"
     assert first_take["capture_window"] is None
     assert first_take["target_window"] is None

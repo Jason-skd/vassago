@@ -19,7 +19,7 @@ from vassago.configs.paths import resolve_repo_path
 if TYPE_CHECKING:
     from vassago.configs.models import ConfigMetadata
 
-CONFIG_SCHEMA_VERSION = "collection_rd_config_v3"
+CONFIG_SCHEMA_VERSION = "collection_rd_config_v4"
 DEFAULT_BATCH_SIZE = 20
 DEFAULT_CAPTURE_WINDOW_DURATION_SECONDS = 5.0
 DEFAULT_COUNTDOWN_DURATION_SECONDS = 5.0
@@ -156,6 +156,7 @@ class CollectionProfile:
             "config_id": self.config_id,
             "label": self.label,
             "description": self.description,
+            "batch_size": self.batch_size,
             "global": {
                 "config_id": self.global_config_id,
             },

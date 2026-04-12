@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 DEFAULT_SESSIONS_ROOT = Path("data/collection/rd/sessions")
 MANIFEST_FILENAME = "manifest.json"
 RAW_UART_FILENAME = "raw_uart.bin"
-SESSION_SCHEMA_VERSION = "collection_rd_session_v3"
+SESSION_SCHEMA_VERSION = "collection_rd_session_v4"
 SESSION_STATUS_PLANNED = "planned"
 SESSION_STATUS_IN_PROGRESS = "in_progress"
 SESSION_STATUS_COMPLETED = "completed"
@@ -118,6 +118,8 @@ def build_session_manifest(
         "radar_id": session_input.radar_id,
         "firmware_id": session_input.firmware_id,
         "gesture": session_input.gesture,
+        "gesture_options": list(profile.gestures),
+        "environment_options": list(profile.environments),
         "config_id": profile.config_id,
         "cli_port": session_input.cli_port,
         "data_port": session_input.data_port,

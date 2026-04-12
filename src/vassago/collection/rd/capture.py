@@ -224,14 +224,6 @@ def _run_take_loop(
                 read_size=read_size,
             )
             summary = summarize_raw_capture(capture_result.raw_capture)
-            collection_ui.render_capture_summary(
-                console,
-                summary=summary,
-                capture_window=capture_result.capture_window,
-                target_window=capture_result.target_window,
-                marked_window=capture_result.marked_window,
-            )
-
             qc_decision = quick_qc.evaluate_capture(
                 summary=summary,
                 capture_window=capture_result.capture_window,
@@ -248,6 +240,14 @@ def _run_take_loop(
                 if decision == collection_ui.TAKE_DECISION_QUIT:
                     return
                 continue
+
+            collection_ui.render_capture_summary(
+                console,
+                summary=summary,
+                capture_window=capture_result.capture_window,
+                target_window=capture_result.target_window,
+                marked_window=capture_result.marked_window,
+            )
 
             decision = collection_ui.prompt_take_decision(take_id=take_id)
             if decision == collection_ui.TAKE_DECISION_RETRY:

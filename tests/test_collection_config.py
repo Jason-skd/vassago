@@ -34,6 +34,7 @@ def test_collection_profile_snapshot_carries_full_effective_config() -> None:
     assert isinstance(gesture_target_durations, dict)
 
     assert snapshot["config_id"] == "rd_phase1_default"
+    assert snapshot["batch_size"] == profile.batch_size
     assert snapshot["global"] == {"config_id": "rd_global_default"}
     assert snapshot["firmware"] == {
         "config_id": "rd_candidate",

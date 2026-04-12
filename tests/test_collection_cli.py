@@ -104,6 +104,12 @@ def test_collection_init_session_command_writes_manifest(tmp_path) -> None:
     assert result.exit_code == 0
     assert len(manifests) == 1
     assert "Collection Session Summary" in result.output
+    manifest = collection_session.load_manifest(manifests[0])
+    assert manifest["gesture_options"] == list(profile.gestures)
+    assert manifest["environment_options"] == list(profile.environments)
+    config_snapshot = manifest["config_snapshot"]
+    assert isinstance(config_snapshot, dict)
+    assert config_snapshot["batch_size"] == profile.batch_size
 
 
 def test_interactive_init_session_prompts_operator_name_without_default(
@@ -256,13 +262,15 @@ def test_run_session_accepts_take_and_updates_manifest(tmp_path, monkeypatch) ->
         "vassago.collection.rd.capture.collection_ui.render_take_state",
         lambda *_args, **_kwargs: None,
     )
+    render_sequence: list[str] = []
+
     monkeypatch.setattr(
         "vassago.collection.rd.capture.collection_ui.render_capture_summary",
-        lambda *_args, **_kwargs: None,
+        lambda *_args, **_kwargs: render_sequence.append("capture_summary"),
     )
     monkeypatch.setattr(
         "vassago.collection.rd.capture.collection_ui.render_quick_qc",
-        lambda *_args, **_kwargs: None,
+        lambda *_args, **_kwargs: render_sequence.append("quick_qc"),
     )
     monkeypatch.setattr(
         "vassago.collection.rd.capture.collection_ui.prompt_take_action",
@@ -284,6 +292,7 @@ def test_run_session_accepts_take_and_updates_manifest(tmp_path, monkeypatch) ->
     assert summary.accepted_take_count == 1
     assert first_take["status"] == collection_session.TAKE_STATUS_ACCEPTED
     assert first_take["raw_uart_path"] is not None
+    assert render_sequence == ["quick_qc", "capture_summary"]
     assert first_take["target_window"] == {
         "start_s": 1.2,
         "end_s": 2.8,
