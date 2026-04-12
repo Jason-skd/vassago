@@ -370,6 +370,10 @@ $RECYCLE.BIN/
 # End of https://www.toptal.com/developers/gitignore/api/macos,windows,visualstudiocode,pycharm,python
 
 ### Custom ###
+# temporary directories
+tmp/
+temp/
+
 # temporary files
 *.tmp
 *.temp
