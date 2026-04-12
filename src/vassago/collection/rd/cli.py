@@ -11,8 +11,13 @@ from rich.console import Console
 
 from vassago.collection.rd import capture as collection_capture
 from vassago.collection.rd import config as collection_config
+from vassago.collection.rd import offline_qc as collection_offline_qc
 from vassago.collection.rd import session as collection_session
 from vassago.collection.rd import ui as collection_ui
+from vassago.collection.rd.qc_contract import QC_SEVERITY_ERROR
+from vassago.collection.rd.qc_contract import QC_SEVERITY_INFO
+from vassago.collection.rd.qc_contract import QC_SEVERITY_WARN
+from vassago.collection.rd.qc_contract import QcReport
 from vassago.firmware.mmwave import ports as mmwave_ports
 from vassago.firmware.mmwave import smoke_test as mmwave_smoke_test
 from vassago.firmware.mmwave import ui as mmwave_ui
@@ -27,6 +32,7 @@ def register_commands(app: typer.Typer) -> None:
     app.command("init-session")(handle_init_session)
     app.command("run-session")(handle_run_session)
     app.command("resume-session")(handle_run_session)
+    app.command("offline-qc")(handle_offline_qc)
 
 
 def handle_list_configs() -> None:
@@ -281,6 +287,20 @@ def handle_run_session(
     )
 
 
+def handle_offline_qc(
+    manifest: Annotated[
+        Path,
+        typer.Option(help="Path to an existing collection manifest."),
+    ],
+) -> None:
+    """Run offline QC against one persisted collection manifest."""
+    report = collection_offline_qc.run_offline_qc(manifest_path=manifest)
+    _render_offline_qc_report(manifest_path=manifest, report=report)
+
+    error_count = len(report.findings_for(severity=QC_SEVERITY_ERROR))
+    raise typer.Exit(code=1 if error_count else 0)
+
+
 def _resolve_profile(
     *,
     config_path: Path | None,
@@ -308,6 +328,34 @@ def _resolve_profile(
 
     msg = "Pass --config-id or enable interactive mode to choose a collection config."
     raise typer.BadParameter(msg)
+
+
+def _render_offline_qc_report(*, manifest_path: Path, report: QcReport) -> None:
+    """Render a compact offline-QC summary suitable for CLI and hooks."""
+    error_count = len(report.findings_for(severity=QC_SEVERITY_ERROR))
+    warn_count = len(report.findings_for(severity=QC_SEVERITY_WARN))
+    info_count = len(report.findings_for(severity=QC_SEVERITY_INFO))
+    result = "fail" if error_count else "pass"
+    if warn_count and not error_count:
+        result = "pass_with_warnings"
+
+    console.print("Offline QC Summary")
+    console.print(f"manifest: {manifest_path}")
+    console.print(f"result: {result}")
+    console.print(f"errors: {error_count}")
+    console.print(f"warnings: {warn_count}")
+    console.print(f"info: {info_count}")
+
+    for finding in report.findings:
+        header = f"[{finding.severity}] {finding.plugin}:{finding.code}"
+        details: list[str] = []
+        if finding.take_id is not None:
+            details.append(f"take={finding.take_id}")
+        if finding.field_path is not None:
+            details.append(f"field={finding.field_path}")
+        suffix = f" {' '.join(details)}" if details else ""
+        console.print(f"{header}{suffix}")
+        console.print(f"  {finding.message}")
 
 
 def _resolve_gesture(

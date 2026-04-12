@@ -1,0 +1,259 @@
+from __future__ import annotations
+
+import struct
+from typing import TYPE_CHECKING
+
+from typer.testing import CliRunner
+
+from vassago.cli import app
+from vassago.collection.rd import metadata_qc
+from vassago.collection.rd import offline_qc
+from vassago.collection.rd import quick_qc
+from vassago.collection.rd import session as collection_session
+from vassago.collection.rd.qc_contract import QC_SEVERITY_ERROR
+from vassago.collection.rd.qc_contract import QC_SEVERITY_WARN
+from vassago.collection.rd.qc_contract import OfflineQcSessionContext
+from vassago.firmware.mmwave.protocol import HEADER_SIZE
+from vassago.firmware.mmwave.protocol import MAGIC_WORD
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+runner = CliRunner()
+
+
+def test_run_metadata_qc_accepts_valid_manifest_contract(tmp_path) -> None:
+    manifest_path, manifest = _write_manifest(tmp_path)
+
+    report = metadata_qc.run_metadata_qc(
+        OfflineQcSessionContext(
+            manifest_path=manifest_path,
+            manifest=manifest,
+        )
+    )
+
+    assert report.findings == ()
+    assert report.has_errors is False
+
+
+def test_run_metadata_qc_flags_missing_top_level_field_and_default_drift(
+    tmp_path,
+) -> None:
+    manifest_path, manifest = _write_manifest(tmp_path)
+    manifest.pop("gesture_options")
+    manifest["hand"] = "left"
+
+    report = metadata_qc.run_metadata_qc(
+        OfflineQcSessionContext(
+            manifest_path=manifest_path,
+            manifest=manifest,
+        )
+    )
+
+    assert report.has_errors is True
+    assert tuple(
+        finding.code for finding in report.findings_for(severity=QC_SEVERITY_ERROR)
+    ) == (metadata_qc.CODE_MISSING_FIELD,)
+    assert tuple(
+        finding.field_path
+        for finding in report.findings_for(severity=QC_SEVERITY_ERROR)
+    ) == ("gesture_options",)
+    assert tuple(
+        finding.code for finding in report.findings_for(severity=QC_SEVERITY_WARN)
+    ) == (metadata_qc.CODE_SNAPSHOT_MISMATCH,)
+    assert tuple(
+        finding.field_path for finding in report.findings_for(severity=QC_SEVERITY_WARN)
+    ) == ("hand",)
+
+
+def test_run_offline_qc_replays_quick_qc_for_valid_accepted_take(tmp_path) -> None:
+    manifest_path, _manifest = _write_manifest(tmp_path)
+
+    report = offline_qc.run_offline_qc(manifest_path=manifest_path)
+
+    assert report.findings == ()
+    assert report.has_errors is False
+
+
+def test_run_offline_qc_surfaces_quick_qc_findings_per_take(tmp_path) -> None:
+    manifest_path, _manifest = _write_manifest(
+        tmp_path,
+        raw_capture=b"",
+        marked_window=None,
+    )
+
+    report = offline_qc.run_offline_qc(manifest_path=manifest_path)
+
+    assert tuple(finding.plugin for finding in report.findings) == (
+        "quick_qc",
+        "quick_qc",
+        "quick_qc",
+    )
+    assert tuple(finding.code for finding in report.findings) == (
+        quick_qc.REASON_MISSING_END_MARK,
+        quick_qc.REASON_EMPTY_CAPTURE,
+        quick_qc.REASON_NO_VALID_PACKETS,
+    )
+    assert tuple(finding.take_id for finding in report.findings) == (
+        "take01",
+        "take01",
+        "take01",
+    )
+
+
+def test_collection_offline_qc_command_returns_nonzero_on_errors(tmp_path) -> None:
+    manifest_path, manifest = _write_manifest(tmp_path)
+    manifest.pop("gesture_options")
+    collection_session.write_manifest(manifest_path=manifest_path, manifest=manifest)
+
+    result = runner.invoke(
+        app,
+        [
+            "collection",
+            "rd",
+            "offline-qc",
+            "--manifest",
+            str(manifest_path),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Offline QC Summary" in result.output
+    assert "errors: 1" in result.output
+
+
+def _write_manifest(
+    tmp_path: Path,
+    *,
+    raw_capture: bytes | None = None,
+    marked_window: dict[str, float] | None = None,
+) -> tuple[Path, dict[str, object]]:
+    raw_uart_path = tmp_path / "take01_raw_uart.bin"
+    raw_uart_path.write_bytes(
+        _build_packet(frame_number=1, tlv_types=[1])
+        if raw_capture is None
+        else raw_capture
+    )
+
+    resolved_marked_window = (
+        {
+            "start_s": 1.0,
+            "end_s": 2.2,
+        }
+        if marked_window is None and raw_capture is None
+        else marked_window
+    )
+    manifest = _build_valid_manifest(
+        raw_uart_path=raw_uart_path,
+        marked_window=resolved_marked_window,
+    )
+    manifest_path = tmp_path / "manifest.json"
+    collection_session.write_manifest(manifest_path=manifest_path, manifest=manifest)
+    return manifest_path, manifest
+
+
+def _build_valid_manifest(
+    *,
+    raw_uart_path: Path,
+    marked_window: dict[str, float] | None,
+) -> dict[str, object]:
+    return {
+        "schema_version": collection_session.SESSION_SCHEMA_VERSION,
+        "session_id": "20260412_090000_alice_swipe_left",
+        "subject_name": "alice",
+        "hand": "right",
+        "distance_m": 0.5,
+        "angle_deg": 0.0,
+        "environment": "office_lab",
+        "operator_name": "operator_a",
+        "note": "pilot",
+        "radar_id": "radar_01",
+        "firmware_id": "fw_01",
+        "gesture": "swipe_left",
+        "batch_size": 1,
+        "gesture_options": ["swipe_left", "swipe_right"],
+        "environment_options": ["office_lab", "hallway"],
+        "cli_port": "/dev/cli",
+        "data_port": "/dev/data",
+        "data_baudrate": 921_600,
+        "takes": [
+            {
+                "take_index": 1,
+                "take_id": "take01",
+                "status": collection_session.TAKE_STATUS_ACCEPTED,
+                "raw_uart_path": str(raw_uart_path),
+                "accepted_at": "2026-04-12T09:00:00+08:00",
+                "capture_window": {
+                    "start_s": 0.0,
+                    "end_s": 5.0,
+                },
+                "target_window": {
+                    "start_s": 1.0,
+                    "end_s": 2.5,
+                },
+                "marked_window": marked_window,
+            }
+        ],
+        "config_snapshot": {
+            "schema_version": "collection_rd_config_v3",
+            "config_id": "stub_profile",
+            "label": "Stub profile",
+            "description": "Stub manifest used for offline QC tests.",
+            "batch_size": 1,
+            "global": {
+                "config_id": "stub_global",
+            },
+            "firmware": {
+                "config_id": "stub_mmwave_cfg",
+            },
+            "runtime": {
+                "capture_window_duration_s": 5.0,
+                "countdown_duration_s": 5.0,
+                "marked_window_end_grace_s": 0.25,
+                "end_mark_key": "space",
+            },
+            "defaults": {
+                "hand": "right",
+                "distance_m": 0.5,
+                "angle_deg": 0.0,
+                "environment": "office_lab",
+                "radar_id": "radar_01",
+                "firmware_id": "fw_01",
+            },
+            "serial": {
+                "cli_port": None,
+                "data_port": None,
+                "cli_baudrate": 115_200,
+                "data_baudrate": 921_600,
+            },
+            "options": {
+                "gestures": ["swipe_left", "swipe_right"],
+                "environments": ["office_lab", "hallway"],
+            },
+            "gesture_target_durations": {
+                "swipe_left": 1.5,
+                "swipe_right": 1.7,
+            },
+        },
+    }
+
+
+def _build_packet(frame_number: int, tlv_types: list[int]) -> bytes:
+    tlv_payload = b""
+    for tlv_type in tlv_types:
+        payload = b"\x00\x01\x02\x03"
+        tlv_payload += struct.pack("<II", tlv_type, len(payload)) + payload
+
+    total_packet_length = HEADER_SIZE + len(tlv_payload)
+    header = MAGIC_WORD + struct.pack(
+        "<8I",
+        0x03060000,
+        total_packet_length,
+        0xA6843,
+        frame_number,
+        0,
+        0,
+        len(tlv_types),
+        0,
+    )
+    return header + tlv_payload
