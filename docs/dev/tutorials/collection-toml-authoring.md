@@ -38,6 +38,8 @@
 - `global.toml` 负责“仓库默认怎么跑”
 - `mmwave cfg` 负责“设备实际怎么配置”
 - `manifest.json` 负责“这次真的发生了什么”
+- 其中 manifest 顶层是 downstream tooling 直接消费的公共 contract
+- `config_snapshot` 是一比一复制生效 config 的 provenance snapshot
 
 ## 2. 写之前，先准备这 5 个答案
 
@@ -179,6 +181,7 @@ push = 1.8
 - 例子：希望最终拿到 12 个 accepted take，就写 `12`。
 - 容易误解的点：它不是“尝试次数上限”。reject 的 take 不算 accepted，系统会继续直到攒够 accepted take。
 - 约束：必须是正整数。
+- 当前 manifest 契约：session 初始化时，它会同时写到 manifest 顶层 `batch_size` 和 `config_snapshot.batch_size`。
 
 ### 4.3 `[global]`
 
@@ -274,6 +277,11 @@ push = 1.8
 
 也就是说，`[defaults]` 更像“表单默认项”，不是“不可更改的真相”。
 
+当前 manifest 契约下：
+
+- `config_snapshot.defaults.*` 保留 profile 的 provenance 默认值
+- 操作员最终确认后的实际 session 值，会写到 manifest 顶层对应字段，例如 `hand`、`distance_m`、`angle_deg`、`environment`、`radar_id`、`firmware_id`
+
 #### `defaults.hand`
 
 - 含义：默认手势执行手。
@@ -315,6 +323,7 @@ push = 1.8
 - 含义：这轮采集允许的 gesture 清单。
 - 怎么填：只列出这轮真的要采的动作。
 - 约束：列表必须非空，元素不能重复。
+- 当前 manifest 契约：session 初始化时，这组列表会写到 manifest 顶层 `gesture_options`，最终实际选择的 `gesture` 也会单独写到顶层。
 
 从当前 `src/vassago/collection/rd/config.py` 和 `src/vassago/collection/rd/cli.py` 来看，仓库目前没有对 gesture 做中央字典校验。也就是说，技术上它现在是“由 profile 自己定义的一组字符串”。
 
@@ -329,6 +338,7 @@ push = 1.8
 - 含义：这轮采集允许选择的环境标签清单。
 - 怎么填：只列出这轮真的会出现的环境。
 - 约束：列表必须非空，元素不能重复，并且必须包含 `defaults.environment`。
+- 当前 manifest 契约：session 初始化时，这组列表会写到 manifest 顶层 `environment_options`，最终实际选择的 `environment` 也会单独写到顶层。
 
 从当前实现看，它和 `gestures` 一样，也还没有仓库级中央枚举；但为了后续数据一致性，应该尽量复用已有命名。
 
@@ -435,7 +445,40 @@ push = 1.8
 - `batch_size` 是“最后想要多少个 accepted take”。
 - 尝试次数可能更多，因为 reject 可能会重试。
 
-## 6. 卡住时，按这个问题判断该去哪填
+## 6. 这份 profile 会怎样进入 manifest
+
+当前实现里，`init-session` 会同时写出两层信息：
+
+- manifest 顶层 public contract：给 downstream tooling 直接消费
+- `config_snapshot`：一比一复制生效 config，给 provenance 和 offline QC 对照
+
+最关键的落盘关系如下：
+
+- `batch_size`
+  会同时出现在 manifest 顶层 `batch_size` 和 `config_snapshot.batch_size`
+- `[defaults]`
+  snapshot 保留默认值来源；操作员最终选定的实际 session 值写到 manifest 顶层
+- `[options]`
+  snapshot 保留来源列表；manifest 顶层额外暴露 `gesture_options`、`environment_options`，以及实际选择的 `gesture`、`environment`
+- `[serial]`
+  snapshot 保留完整 serial 默认值；如果某个 serial 字段被 downstream tooling 依赖，例如 `data_baudrate`，它也必须稳定出现在 manifest 顶层
+- `runtime.*` 与 `gesture_target_durations`
+  主要保留在 `config_snapshot`；每次 accepted take 的真实 `capture_window`、`target_window`、`marked_window` 写到 take 顶层
+
+最容易混淆的是三个不同位置的 `schema_version`：
+
+- profile TOML 正文里的 `schema_version`
+  表示 profile 文件本身采用的 schema 版本
+- manifest 顶层 `schema_version`
+  表示 session manifest 的 schema 版本
+- `config_snapshot.schema_version`
+  表示 snapshot 对象的 schema 版本
+
+它们不是同一个东西，也不应该互相替代。
+
+如果某个字段需要支撑 `raw_uart.bin -> rd.npz` 这类 downstream 路线，而且该路线不应依赖读取 `config_snapshot`，那么这个字段就必须稳定暴露在 manifest 顶层。
+
+## 7. 卡住时，按这个问题判断该去哪填
 
 如果你卡在某个字段，不知道该往哪放，先问自己：
 
@@ -479,7 +522,7 @@ push = 1.8
 
 - 写到 `[gesture_target_durations]`
 
-## 7. 提交前自检
+## 8. 提交前自检
 
 至少确认这些事：
 
@@ -506,7 +549,7 @@ uv run python -m vassago.configs.validation
 uv run vassago collection rd list-configs
 ```
 
-## 8. 最后给一个最实用的原则
+## 9. 最后给一个最实用的原则
 
 新增 profile 时，优先做“最小改动”。
 

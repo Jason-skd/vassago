@@ -2,7 +2,7 @@
 
 本文档面向需要执行毫米波手势数据采集的协作者。
 
-`collection` 的目标是把一次采集会话拆成可恢复、可验收、可追踪的一组 take。当前版本只会在你明确接受样本后，保存：
+`collection` 的目标是把一次采集会话拆成可恢复、可验收、可追踪的一组 take。当前版本会在 session 创建时先落一份 `manifest.json`，其中包含顶层公共字段和完整 `config_snapshot`；只有你明确接受样本后，才会补写正式 take 内容：
 
 - `raw_uart.bin`
 - 当前 take 的 `status`
@@ -80,6 +80,8 @@ uv run vassago collection rd init-session
 - 交互模式下，`operator_name` 必须手动输入，不会自动带默认值
 - `gesture`、`environment` 不是自由输入，而是从 profile 里选择
 - session 创建成功后，会生成一个 `manifest.json`
+- `manifest.json` 顶层会直接写入本次 session 的公共字段，例如 `gesture`、`batch_size`、`gesture_options`、`environment_options`、串口信息
+- `config_snapshot` 会同时保留本次生效 collection config 的完整镜像，供后续追溯和离线 QC 使用
 
 如果你已经知道所有参数，也可以用非交互模式：
 
@@ -87,7 +89,7 @@ uv run vassago collection rd init-session
 uv run vassago collection rd init-session \
   --config-id rd_phase1_default \
   --subject-name skd \
-  --gesture swipe_left \
+  --gesture wave \
   --environment office_lab \
   --operator-name your_name \
   --radar-id rd_aop_01 \
@@ -212,6 +214,11 @@ uv run vassago collection rd list-sessions
 - 写入 `marked_window`
 - 更新 session 的 `manifest.json`
 
+补充说明：
+
+- `manifest.json` 顶层公共字段和 `config_snapshot` 在 `init-session` 阶段就已经生成
+- `Accept take` 这一步主要是在补写当前 take 的产物路径、窗口信息和接受状态
+
 典型目录结构如下：
 
 ```text
@@ -235,6 +242,7 @@ data/collection/rd/sessions/<session_id>/
 - 你接受一个 take 后，`raw_uart.bin` 确实生成
 - `manifest.json` 被更新
 - 下次重新运行 `run-session` 时，会从下一个未完成 take 继续
+- 如果后续要把 `raw_uart.bin` 提取成其他产物，应优先读取 manifest 顶层公共字段，不要依赖从 `config_snapshot` 反推
 
 如果本次 session 的所有 take 都被接受，session 会进入完成状态。
 

@@ -332,6 +332,7 @@
 - 更新 session 状态
 - 接受 take 并写回 manifest
 - 生成 raw capture 输出路径
+- 维护 manifest 顶层 public contract 和 `config_snapshot` 的落盘结构
 
 优先复用的函数与类型：
 
@@ -350,6 +351,7 @@
 - 手动拼 `data/collection/rd/sessions/.../manifest.json`
 - 在多个地方各写一份 manifest schema
 - 自己更新 take 状态和路径字段
+- 在别的模块里重新定义 top-level manifest contract
 
 ### [src/vassago/collection/rd/capture.py](../../../src/vassago/collection/rd/capture.py)
 
@@ -379,12 +381,45 @@
 
 - 需要基于当前 phase 规则做最小 quick QC
 - 需要把 reason code 渲染为可读文本
+- 需要复用 live / offline 共用的样本质量检查实现
 
 优先复用的函数与类型：
 
+- `run_quick_qc()`
 - `evaluate_capture()`
 - `describe_reason()`
 - `QuickQcDecision`
+
+它已经同时提供：
+
+- peer-style `QcReport` 结果，用于后续 `offline_qc`
+- live collection 当前仍在用的 `QuickQcDecision` 兼容层
+
+### [src/vassago/collection/rd/qc_contract.py](../../../src/vassago/collection/rd/qc_contract.py)
+
+优先复用场景：
+
+- 需要定义新的 collection QC plugin
+- 需要共享 live / offline QC 的 finding/report 模型
+- 需要复用 manifest 顶层 contract 和 snapshot 对照规则
+
+优先复用的类型与常量：
+
+- `QcFinding`
+- `QcReport`
+- `merge_reports()`
+- `QuickQcContext`
+- `MANIFEST_TOP_LEVEL_EXTRACT_FIELDS`
+- `MANIFEST_TOP_LEVEL_SELECTION_FIELDS`
+- `MANIFEST_TOP_LEVEL_OPTION_FIELDS`
+- `MANIFEST_TAKE_EXTRACT_FIELDS`
+- `MANIFEST_SNAPSHOT_COMPARISON_RULES`
+- `MANIFEST_SNAPSHOT_MEMBERSHIP_RULES`
+
+最重要的原则：
+
+- 不要在 `quick_qc`、`offline_qc`、extractor 或新 CLI 里各自再发明一套 finding schema
+- 不要把 manifest 顶层字段清单和 snapshot 对照规则复制到多个模块里
 
 ### [src/vassago/collection/rd/ui.py](../../../src/vassago/collection/rd/ui.py)
 
@@ -451,6 +486,8 @@
   看 profile 加载和 snapshot 怎么用。
 - [tests/test_collection_session.py](../../../tests/test_collection_session.py)
   看 session manifest 的初始化和查询怎么用。
+- [tests/test_collection_quick_qc.py](../../../tests/test_collection_quick_qc.py)
+  看 quick QC 的共享检查和 live 兼容层怎么用。
 - [tests/test_collection_cli.py](../../../tests/test_collection_cli.py)
   看 CLI 如何薄层接线到库层模块。
 
@@ -472,6 +509,8 @@
   先看 `collection.rd.session`
 - “做最小 quick QC”
   先看 `collection.rd.quick_qc`
+- “定义 collection QC finding / report / manifest contract”
+  先看 `collection.rd.qc_contract`
 - “给 CLI 加交互”
   先看 `firmware.mmwave.ui` 或 `collection.rd.ui`
 
