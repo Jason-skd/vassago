@@ -13,6 +13,13 @@ pre-commit:
     config-check:
       run: uv run python -m vassago.configs.validation
 
+    collection-offline-qc:
+      glob: "data/collection/rd/sessions/*/manifest.json"
+      run: >-
+        sh -c 'for manifest in "$@"; do
+        uv run vassago collection rd offline-qc --manifest "$manifest" || exit 1;
+        done' sh {staged_files}
+
     typecheck:
       glob: "*.py"
       run: uv run pyright
