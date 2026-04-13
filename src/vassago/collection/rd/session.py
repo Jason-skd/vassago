@@ -46,6 +46,7 @@ class SessionInitInput:
     radar_id: str
     firmware_id: str
     gesture: str
+    firmware_config_id: str
     cli_port: str
     data_port: str
     data_baudrate: int
@@ -124,7 +125,9 @@ def build_session_manifest(
         "cli_port": session_input.cli_port,
         "data_port": session_input.data_port,
         "data_baudrate": session_input.data_baudrate,
-        "config_snapshot": profile.as_snapshot(),
+        "config_snapshot": profile.as_snapshot(
+            firmware_config_id=session_input.firmware_config_id,
+        ),
         "takes": build_take_plan(batch_size=profile.batch_size),
     }
 

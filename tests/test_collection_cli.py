@@ -30,7 +30,7 @@ def test_collection_list_configs_command_renders_sample_profile(
                 description="Short description",
                 global_config_id="rd_global_default",
                 batch_size=1,
-                firmware_config_id="rd_candidate",
+                default_firmware_config_id="rd_candidate",
                 defaults=collection_config.CollectionDefaults(
                     hand="right",
                     distance_m=0.5,
@@ -110,6 +110,51 @@ def test_collection_init_session_command_writes_manifest(tmp_path) -> None:
     config_snapshot = manifest["config_snapshot"]
     assert isinstance(config_snapshot, dict)
     assert config_snapshot["batch_size"] == profile.batch_size
+    assert config_snapshot["firmware"] == {"config_id": "rd_pointcloud_dual"}
+
+
+def test_collection_init_session_command_allows_firmware_cfg_override(tmp_path) -> None:
+    profile = collection_config.get_collection_profile("rd_phase1_default")
+    result = runner.invoke(
+        app,
+        [
+            "collection",
+            "rd",
+            "init-session",
+            "--config-id",
+            "rd_phase1_default",
+            "--subject-name",
+            "alice",
+            "--gesture",
+            profile.gestures[0],
+            "--environment",
+            profile.defaults.environment,
+            "--operator-name",
+            "operator_a",
+            "--radar-id",
+            "radar_01",
+            "--firmware-id",
+            "fw_01",
+            "--firmware-config-id",
+            "rd_candidate",
+            "--cli-port",
+            "/dev/cli",
+            "--data-port",
+            "/dev/data",
+            "--sessions-root",
+            str(tmp_path),
+            "--no-interactive",
+        ],
+    )
+
+    manifests = list(Path(tmp_path).glob("*/manifest.json"))
+
+    assert result.exit_code == 0
+    assert len(manifests) == 1
+    manifest = collection_session.load_manifest(manifests[0])
+    config_snapshot = manifest["config_snapshot"]
+    assert isinstance(config_snapshot, dict)
+    assert config_snapshot["firmware"] == {"config_id": "rd_candidate"}
 
 
 def test_interactive_init_session_prompts_operator_name_without_default(
@@ -130,6 +175,10 @@ def test_interactive_init_session_prompts_operator_name_without_default(
     monkeypatch.setattr(
         "vassago.collection.rd.cli._resolve_gesture",
         lambda **_kwargs: profile.gestures[0],
+    )
+    monkeypatch.setattr(
+        "vassago.collection.rd.cli._resolve_firmware_config_id",
+        lambda **_kwargs: profile.default_firmware_config_id,
     )
     monkeypatch.setattr(
         "vassago.collection.rd.cli._resolve_ports",
@@ -177,6 +226,7 @@ def test_interactive_init_session_prompts_operator_name_without_default(
         note=None,
         radar_id=None,
         firmware_id=None,
+        firmware_config_id=None,
         gesture=None,
         cli_port=None,
         data_port=None,
@@ -206,6 +256,7 @@ def test_run_session_accepts_take_and_updates_manifest(tmp_path, monkeypatch) ->
             radar_id="radar_01",
             firmware_id="fw_01",
             gesture=selected_gesture,
+            firmware_config_id=profile.default_firmware_config_id,
             cli_port="/dev/cli",
             data_port="/dev/data",
             data_baudrate=921_600,

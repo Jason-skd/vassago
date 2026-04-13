@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from vassago.configs.models import CatalogEntry
 
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+MMWAVE_CFG_INTEGRITY_SCHEMA_VERSION = "mmwave_cfg_integrity_v1"
 
 
 @dataclass(slots=True, frozen=True)
@@ -81,6 +82,66 @@ def compute_mmwave_cfg_digest(path: Path) -> str:
     """Compute a path-independent normalized content digest for one cfg file."""
     normalized_text = _normalize_cfg_text(path.read_text(encoding="utf-8"))
     return hashlib.sha256(normalized_text.encode("utf-8")).hexdigest()
+
+
+def build_mmwave_cfg_integrity_records(
+    entries: Iterable[CatalogEntry],
+) -> list[MmwaveCfgIntegrityRecord]:
+    """Build stable digest records for one set of managed mmWave cfg entries."""
+    return [
+        MmwaveCfgIntegrityRecord(
+            config_id=entry.config_id,
+            sha256=compute_mmwave_cfg_digest(entry.path),
+        )
+        for entry in sorted(entries, key=lambda entry: entry.config_id)
+    ]
+
+
+def format_mmwave_cfg_integrity_registry(
+    records: Iterable[MmwaveCfgIntegrityRecord],
+) -> str:
+    """Render the integrity registry TOML with stable ordering."""
+    record_blocks = _format_integrity_record_blocks(records)
+    if not record_blocks:
+        return f'schema_version = "{MMWAVE_CFG_INTEGRITY_SCHEMA_VERSION}"\n'
+    return (
+        f'schema_version = "{MMWAVE_CFG_INTEGRITY_SCHEMA_VERSION}"\n\n{record_blocks}'
+    )
+
+
+def append_missing_mmwave_cfg_integrity_records(
+    entries: Iterable[CatalogEntry],
+    *,
+    registry_path: Path | None = None,
+) -> tuple[Path, tuple[str, ...]]:
+    """Append integrity records for newly added cfg ids without touching old hashes."""
+    resolved_registry_path = resolve_repo_path(
+        registry_path or MMWAVE_CFG_INTEGRITY_PATH,
+    )
+    existing_registry = load_mmwave_cfg_integrity_registry(registry_path)
+    missing_entries = [
+        entry
+        for entry in sorted(entries, key=lambda entry: entry.config_id)
+        if entry.config_id not in existing_registry
+    ]
+    if not missing_entries:
+        return resolved_registry_path, ()
+
+    existing_text = resolved_registry_path.read_text(encoding="utf-8")
+    append_prefix = ""
+    if existing_text:
+        append_prefix = "\n" if existing_text.endswith("\n") else "\n\n"
+    appended_records = build_mmwave_cfg_integrity_records(missing_entries)
+    resolved_registry_path.write_text(
+        existing_text
+        + append_prefix
+        + _format_integrity_record_blocks(appended_records),
+        encoding="utf-8",
+    )
+    clear_mmwave_cfg_integrity_cache()
+    return resolved_registry_path, tuple(
+        record.config_id for record in appended_records
+    )
 
 
 def validate_mmwave_cfg_integrity(
@@ -179,6 +240,26 @@ def _parse_integrity_record(
         config_id=config_id,
     )
     return MmwaveCfgIntegrityRecord(config_id=config_id, sha256=sha256)
+
+
+def _format_integrity_record_blocks(
+    records: Iterable[MmwaveCfgIntegrityRecord],
+) -> str:
+    """Render one or more [[cfg]] blocks with trailing newline."""
+    lines: list[str] = []
+    for record in records:
+        if lines:
+            lines.append("")
+        lines.extend(
+            (
+                "[[cfg]]",
+                f'config_id = "{record.config_id}"',
+                f'sha256 = "{record.sha256}"',
+            )
+        )
+    if not lines:
+        return ""
+    return "\n".join(lines) + "\n"
 
 
 def _normalize_cfg_text(text: str) -> str:

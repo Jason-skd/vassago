@@ -124,7 +124,7 @@ class CollectionProfile:
     description: str
     global_config_id: str
     batch_size: int
-    firmware_config_id: str
+    default_firmware_config_id: str
     defaults: CollectionDefaults
     serial: CollectionSerialDefaults
     gestures: tuple[str, ...]
@@ -149,8 +149,17 @@ class CollectionProfile:
         msg = f"Target-window duration is not defined for gesture={gesture!r}."
         raise KeyError(msg)
 
-    def as_snapshot(self) -> dict[str, object]:
+    def as_snapshot(
+        self,
+        *,
+        firmware_config_id: str | None = None,
+    ) -> dict[str, object]:
         """Build the manifest snapshot for this profile."""
+        selected_firmware_config_id = (
+            firmware_config_id
+            if firmware_config_id is not None
+            else self.default_firmware_config_id
+        )
         return {
             "schema_version": CONFIG_SCHEMA_VERSION,
             "config_id": self.config_id,
@@ -167,7 +176,7 @@ class CollectionProfile:
                 "end_mark_key": self.end_mark_key,
             },
             "firmware": {
-                "config_id": self.firmware_config_id,
+                "config_id": selected_firmware_config_id,
             },
             "defaults": self.defaults.as_dict(),
             "serial": self.serial.as_dict(),
@@ -252,8 +261,8 @@ def load_collection_profile(
         catalog=resolved_catalog,
     )
     batch_size = _load_batch_size(data, resolved_path=resolved_path)
-    firmware_config_id = _load_firmware_binding(data)
-    _require_mmwave_config(firmware_config_id, catalog=resolved_catalog)
+    default_firmware_config_id = _load_firmware_binding(data)
+    _require_mmwave_config(default_firmware_config_id, catalog=resolved_catalog)
     capture_window_duration_s = _load_capture_window_duration_s(
         data,
         global_config=global_config,
@@ -299,7 +308,7 @@ def load_collection_profile(
         description=metadata.description,
         global_config_id=global_config_id,
         batch_size=batch_size,
-        firmware_config_id=firmware_config_id,
+        default_firmware_config_id=default_firmware_config_id,
         defaults=defaults,
         serial=serial,
         gestures=gestures,
@@ -441,8 +450,18 @@ def _load_batch_size(
 def _load_firmware_binding(data: dict[str, Any]) -> str:
     firmware_table = _require_table(data, "firmware")
     if "config_path" in firmware_table:
-        msg = "firmware.config_path is forbidden; use firmware.config_id only."
+        msg = (
+            "firmware.config_path is forbidden; use firmware.default_config_id instead."
+        )
         raise ValueError(msg)
+    if "default_config_id" in firmware_table and "config_id" in firmware_table:
+        msg = (
+            "Use either firmware.default_config_id or the legacy "
+            "firmware.config_id, not both."
+        )
+        raise ValueError(msg)
+    if "default_config_id" in firmware_table:
+        return _require_str(firmware_table, "default_config_id")
     return _require_str(firmware_table, "config_id")
 
 

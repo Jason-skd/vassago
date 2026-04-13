@@ -10,6 +10,9 @@ from vassago.configs.catalog import discover_paths
 from vassago.configs.catalog import load_root_specs
 from vassago.configs.checks import DEFAULT_CONFIG_VALIDATION_CHECKS
 from vassago.configs.metadata import parse_metadata_header
+from vassago.configs.mmwave_cfg_integrity import (
+    append_missing_mmwave_cfg_integrity_records,
+)
 from vassago.configs.mmwave_cfg_integrity import clear_mmwave_cfg_integrity_cache
 from vassago.configs.models import CatalogEntry
 from vassago.configs.models import ConfigKind
@@ -35,6 +38,7 @@ def validate_all_configs(
     clear_catalog_cache()
     clear_mmwave_cfg_integrity_cache()
     metadata_messages, catalog = _run_metadata_stage()
+    _append_missing_mmwave_cfg_integrity_records(catalog)
     validation_context = ValidationContext(catalog=catalog)
     semantic_messages = _run_validation_checks(
         validation_context,
@@ -157,6 +161,17 @@ def _run_validation_checks(
     for check in checks:
         messages.extend(check(context))
     return messages
+
+
+def _append_missing_mmwave_cfg_integrity_records(catalog: ConfigCatalog) -> None:
+    """Persist one first-seen digest for newly added managed mmWave cfg files."""
+    mmwave_entries = catalog.list_entries(kind=ConfigKind.MMWAVE_CFG)
+    if not mmwave_entries:
+        return
+    try:
+        append_missing_mmwave_cfg_integrity_records(mmwave_entries)
+    except Exception:  # noqa: BLE001
+        return
 
 
 def _print_messages(messages: Iterable[ValidationMessage]) -> int:

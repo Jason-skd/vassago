@@ -126,27 +126,36 @@ def render_smoke_test_summary(
 
 def prompt_for_known_config(
     configs: Sequence[KnownMmwaveConfig],
+    *,
+    default_config_id: str | None = None,
+    allow_skip: bool = True,
+    message: str = "Choose a cfg for this smoke test",
 ) -> KnownMmwaveConfig | None:
     """Prompt the operator to choose a curated cfg or skip config upload."""
-    choices = [
-        questionary.Choice(
+    choices: list[questionary.Choice] = []
+    default_choice: questionary.Choice | None = None
+    for config in configs:
+        choice = questionary.Choice(
             title=(
                 f"{config.label} [{config.config_id}] "
                 f"risk={config.risk} path={config.path}"
             ),
             value=config,
         )
-        for config in configs
-    ]
-    choices.append(
-        questionary.Choice(
-            title="Listen only (skip cfg upload)",
-            value=None,
-        ),
-    )
+        if config.config_id == default_config_id:
+            default_choice = choice
+        choices.append(choice)
+    if allow_skip:
+        choices.append(
+            questionary.Choice(
+                title="Listen only (skip cfg upload)",
+                value=None,
+            ),
+        )
     return questionary.select(
-        "Choose a cfg for this smoke test",
+        message,
         choices=choices,
+        default=default_choice,
     ).ask()
 
 

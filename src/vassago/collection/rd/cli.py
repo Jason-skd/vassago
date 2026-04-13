@@ -18,6 +18,7 @@ from vassago.collection.rd.qc_contract import QC_SEVERITY_ERROR
 from vassago.collection.rd.qc_contract import QC_SEVERITY_INFO
 from vassago.collection.rd.qc_contract import QC_SEVERITY_WARN
 from vassago.collection.rd.qc_contract import QcReport
+from vassago.firmware.mmwave import config as mmwave_config
 from vassago.firmware.mmwave import ports as mmwave_ports
 from vassago.firmware.mmwave import smoke_test as mmwave_smoke_test
 from vassago.firmware.mmwave import ui as mmwave_ui
@@ -99,6 +100,12 @@ def handle_init_session(  # noqa: PLR0913
         str | None,
         typer.Option(help="Firmware or demo identifier."),
     ] = None,
+    firmware_config_id: Annotated[
+        str | None,
+        typer.Option(
+            help="Override the mmWave cfg config_id used for this session.",
+        ),
+    ] = None,
     gesture: Annotated[
         str | None,
         typer.Option(help="Gesture selected from the collection profile."),
@@ -143,6 +150,11 @@ def handle_init_session(  # noqa: PLR0913
     )
     selected_gesture = _resolve_gesture(
         gesture=gesture,
+        profile=profile,
+        interactive=resolved_interactive,
+    )
+    selected_firmware_config_id = _resolve_firmware_config_id(
+        value=firmware_config_id,
         profile=profile,
         interactive=resolved_interactive,
     )
@@ -209,6 +221,7 @@ def handle_init_session(  # noqa: PLR0913
             message="firmware_id",
         ),
         gesture=selected_gesture,
+        firmware_config_id=selected_firmware_config_id,
         cli_port=selected_cli_port,
         data_port=selected_data_port,
         data_baudrate=data_baudrate or profile.serial.data_baudrate,
@@ -443,6 +456,38 @@ def _resolve_ports(
         default=suggested_data_port,
     )
     return resolved_cli_port, resolved_data_port
+
+
+def _resolve_firmware_config_id(
+    *,
+    value: str | None,
+    profile: collection_config.CollectionProfile,
+    interactive: bool,
+) -> str:
+    """Resolve the mmWave cfg used by this session."""
+    known_configs = mmwave_config.list_known_configs()
+    known_config_ids = {config.config_id for config in known_configs}
+
+    if value is not None:
+        if value not in known_config_ids:
+            msg = f"Unknown firmware config id: {value!r}."
+            raise typer.BadParameter(msg)
+        return value
+
+    default_config_id = profile.default_firmware_config_id
+    if not interactive or len(known_configs) <= 1:
+        return default_config_id
+
+    selected_config = mmwave_ui.prompt_for_known_config(
+        known_configs,
+        default_config_id=default_config_id,
+        allow_skip=False,
+        message="Choose firmware cfg for this session",
+    )
+    if selected_config is None:
+        msg = "Firmware config selection was cancelled."
+        raise typer.BadParameter(msg)
+    return selected_config.config_id
 
 
 def _resolve_choice(

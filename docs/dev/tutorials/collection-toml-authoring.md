@@ -64,7 +64,7 @@
 - `label`
 - `description`
 - `batch_size`
-- `[firmware].config_id`
+- `[firmware].default_config_id`
 - `[defaults]`
 - `[options]`
 - `[gesture_target_durations]`
@@ -85,7 +85,7 @@
 1. 复制 `configs/collection/rd/templates/rd_template.toml`
 2. 改文件头元数据
 3. 填 `global.config_id`
-4. 填 `firmware.config_id`
+4. 填 `firmware.default_config_id`
 5. 填 `[defaults]`、`[options]`、`[gesture_target_durations]`
 6. 除非你非常明确知道为什么要覆盖 global，否则不要加运行时 override
 
@@ -106,7 +106,7 @@ batch_size = 12
 config_id = "rd_global_default"
 
 [firmware]
-config_id = "rd_candidate"
+default_config_id = "rd_pointcloud_dual"
 
 [defaults]
 hand = "right"
@@ -199,17 +199,24 @@ push = 1.8
 
 这一段决定“这轮采集前，要向设备发送哪份 repo-managed mmWave cfg”。
 
-#### `firmware.config_id`
+#### `firmware.default_config_id`
 
-- 含义：绑定一份仓库管理下的 mmWave `.cfg`。
-- 怎么填：填你真正想下发给设备的 cfg 的 `config_id`。
-- 去哪里找：看 `configs/firmware/mmwave/*.cfg` 文件头。当前仓库里能看到的例子包括 `rd_candidate` 和 `baseline_pointcloud`。
-- 怎么选：如果这轮是 RD-over-UART 工作流，就选与之匹配的 cfg；如果只是保守 bring-up，就可能选 baseline 类 cfg。
+- 含义：给 session 初始化时的 firmware cfg 方向键列表提供一个默认选中值。
+- 怎么填：填你希望默认高亮的 cfg `config_id`。
+- 去哪里找：看 `configs/firmware/mmwave/*.cfg` 文件头。当前仓库里能看到的例子包括 `rd_candidate`、`rd_pointcloud_dual` 和 `baseline_pointcloud`。
+- 怎么选：如果这轮通常跑点云 + RD 双采集，就把双采集 cfg 设成默认；如果串口链路更脆弱，就把更保守的 cfg 设成默认。
 - 不要做：不要写 `config_path`，也不要写磁盘路径。
+
+运行时行为：
+
+- 交互式 `init-session` 会读取当前所有 active mmWave cfg，给操作员一个方向键列表
+- `default_config_id` 只决定这个列表默认高亮哪一项
+- 本次 session 真正选中的 cfg 会写进 manifest snapshot 里的 `firmware.config_id`
 
 非常重要的区分：
 
-- `[firmware].config_id` 是“要加载哪份 mmWave cfg”
+- `[firmware].default_config_id` 是“session 初始化时，firmware cfg 列表默认选哪一项”
+- manifest snapshot 里的 `firmware.config_id` 是“这次 session 实际加载了哪份 mmWave cfg”
 - `defaults.firmware_id` 是“写进 manifest 的固件/版本标签”
 
 这两个字段不是一回事。
@@ -417,9 +424,9 @@ push = 1.8
 - `config_id` 才是仓库管理配置时真正依赖的主键。
 - 最好让二者主题一致，但不要把它们当成同一个东西。
 
-### `[firmware].config_id` vs `defaults.firmware_id`
+### `[firmware].default_config_id` vs `defaults.firmware_id`
 
-- `[firmware].config_id` 指向仓库里的 mmWave `.cfg`，决定运行时加载哪份硬件配置。
+- `[firmware].default_config_id` 决定交互式 session 初始化时，默认高亮哪份 mmWave `.cfg`。
 - `defaults.firmware_id` 只是 session 初始化时写入 manifest 的默认标签，更像“这轮数据对应的固件版本说明”。
 
 ### `global.toml` vs profile 顶层 override
@@ -501,7 +508,7 @@ push = 1.8
 
 如果是：
 
-- 去 `[firmware].config_id`
+- 去 `[firmware].default_config_id`
 - 去 `configs/firmware/mmwave/*.cfg` 找目标文件的 `config_id`
 
 ### “这是 CLI 创建 session 时要给操作员的默认值吗？”
@@ -532,7 +539,7 @@ push = 1.8
 4. `config_id` 稳定、可读、唯一
 5. `lifecycle` 与文件角色一致
 6. `global.config_id` 指向存在的 global 配置
-7. `firmware.config_id` 指向存在的 mmWave cfg
+7. `firmware.default_config_id` 指向存在的 mmWave cfg
 8. `defaults.environment` 出现在 `options.environments` 里
 9. `options.gestures` 与 `gesture_target_durations` 完整对齐
 10. 如果没有明确理由，没有额外覆盖 global 的运行时字段

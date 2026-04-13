@@ -14,7 +14,7 @@ def test_get_collection_profile_loads_sample_config() -> None:
     assert profile.countdown_duration_s == 5.0
     assert profile.marked_window_end_grace_s == 0.25
     assert profile.end_mark_key == "space"
-    assert profile.firmware_config_id == "rd_candidate"
+    assert profile.default_firmware_config_id == "rd_pointcloud_dual"
     assert (
         profile.target_window_duration_for(gesture=first_gesture) == expected_duration
     )
@@ -37,7 +37,7 @@ def test_collection_profile_snapshot_carries_full_effective_config() -> None:
     assert snapshot["batch_size"] == profile.batch_size
     assert snapshot["global"] == {"config_id": "rd_global_default"}
     assert snapshot["firmware"] == {
-        "config_id": "rd_candidate",
+        "config_id": "rd_pointcloud_dual",
     }
     assert runtime["capture_window_duration_s"] == 5.0
     assert runtime["countdown_duration_s"] == 5.0
@@ -46,3 +46,6 @@ def test_collection_profile_snapshot_carries_full_effective_config() -> None:
         gesture_target_durations[first_duration.gesture]
         == first_duration.target_window_duration_s
     )
+
+    fallback_snapshot = profile.as_snapshot(firmware_config_id="rd_candidate")
+    assert fallback_snapshot["firmware"] == {"config_id": "rd_candidate"}

@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from typer.testing import CliRunner
+
+from vassago.cli import app
 from vassago.configs.catalog import clear_catalog_cache
 from vassago.configs.catalog import load_catalog
 from vassago.configs.metadata import parse_metadata_header
+from vassago.configs.mmwave_cfg_integrity import clear_mmwave_cfg_integrity_cache
 from vassago.configs.mmwave_cfg_integrity import compute_mmwave_cfg_digest
+from vassago.configs.mmwave_cfg_integrity import load_mmwave_cfg_integrity_registry
 from vassago.configs.mmwave_cfg_integrity import validate_mmwave_cfg_integrity
 from vassago.configs.models import CatalogEntry
 from vassago.configs.models import ConfigKind
@@ -17,6 +22,11 @@ from vassago.firmware.mmwave.config_validation import validate_cfg
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_CFG_PATH = REPO_ROOT / "configs/firmware/mmwave/baseline_pointcloud.cfg"
+RD_CANDIDATE_CFG_PATH = REPO_ROOT / "configs/firmware/mmwave/rd_candidate.cfg"
+RD_POINTCLOUD_DUAL_CFG_PATH = (
+    REPO_ROOT / "configs/firmware/mmwave/rd_pointcloud_dual.cfg"
+)
+runner = CliRunner()
 
 
 def test_catalog_discovers_repo_managed_configs() -> None:
@@ -52,6 +62,84 @@ def test_validate_all_configs_has_no_errors_for_repo_baseline() -> None:
     assert not [
         message for message in messages if message.level == ValidationLevel.ERROR
     ]
+
+
+def test_record_missing_mmwave_cfg_integrity_command_appends_new_cfg_only(
+    tmp_path: Path,
+) -> None:
+    registry_path = tmp_path / "integrity.toml"
+    _write_integrity_registry_entries(
+        registry_path,
+        entries=(
+            (
+                "baseline_pointcloud",
+                compute_mmwave_cfg_digest(BASELINE_CFG_PATH),
+            ),
+            (
+                "rd_candidate",
+                compute_mmwave_cfg_digest(RD_CANDIDATE_CFG_PATH),
+            ),
+        ),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "configs",
+            "record-missing-mmwave-cfg-integrity",
+            "--registry-path",
+            str(registry_path),
+        ],
+    )
+
+    registry = load_mmwave_cfg_integrity_registry(registry_path)
+
+    assert result.exit_code == 0
+    assert "added_config_ids: rd_pointcloud_dual" in result.output
+    assert registry["rd_candidate"].sha256 == compute_mmwave_cfg_digest(
+        RD_CANDIDATE_CFG_PATH
+    )
+    assert sorted(registry) == [
+        "baseline_pointcloud",
+        "rd_candidate",
+        "rd_pointcloud_dual",
+    ]
+
+
+def test_validate_all_configs_appends_missing_mmwave_cfg_hash(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    registry_path = tmp_path / "integrity.toml"
+    _write_integrity_registry_entries(
+        registry_path,
+        entries=(
+            (
+                "baseline_pointcloud",
+                compute_mmwave_cfg_digest(BASELINE_CFG_PATH),
+            ),
+            (
+                "rd_candidate",
+                compute_mmwave_cfg_digest(RD_CANDIDATE_CFG_PATH),
+            ),
+        ),
+    )
+
+    monkeypatch.setattr(
+        "vassago.configs.mmwave_cfg_integrity.MMWAVE_CFG_INTEGRITY_PATH",
+        registry_path,
+    )
+    clear_mmwave_cfg_integrity_cache()
+
+    messages = validate_all_configs()
+    registry = load_mmwave_cfg_integrity_registry(registry_path)
+
+    assert not [
+        message for message in messages if message.level == ValidationLevel.ERROR
+    ]
+    assert registry["rd_pointcloud_dual"].sha256 == compute_mmwave_cfg_digest(
+        RD_POINTCLOUD_DUAL_CFG_PATH
+    )
 
 
 def test_validate_all_configs_accepts_custom_checks() -> None:
@@ -136,17 +224,29 @@ def test_mmwave_cfg_integrity_rejects_cfg_content_changes(tmp_path: Path) -> Non
 
 
 def _write_integrity_registry(path: Path, *, config_id: str, sha256: str) -> Path:
-    path.write_text(
-        "\n".join(
+    return _write_integrity_registry_entries(
+        path,
+        entries=((config_id, sha256),),
+    )
+
+
+def _write_integrity_registry_entries(
+    path: Path,
+    *,
+    entries: tuple[tuple[str, str], ...],
+) -> Path:
+    lines = ['schema_version = "mmwave_cfg_integrity_v1"', ""]
+    for config_id, sha256 in entries:
+        lines.extend(
             (
-                'schema_version = "mmwave_cfg_integrity_v1"',
-                "",
                 "[[cfg]]",
                 f'config_id = "{config_id}"',
                 f'sha256 = "{sha256}"',
                 "",
             )
-        ),
+        )
+    path.write_text(
+        "\n".join(lines),
         encoding="utf-8",
     )
     return path

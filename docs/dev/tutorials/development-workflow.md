@@ -116,7 +116,60 @@ Context: docs/dev/context/<file>.md
 
 AI 当被要求制定实施计划时, 需要主动分析是否有可以用上现成的轮子, 并提醒用户添加依赖, 时刻需要保持代码简洁易读, 而不是尝试自己 solve anything.
 
-## 9. Python 改动的默认验收
+## 9. Configs 管理策略
+
+本仓库已经有一套完整的 `configs/` 管理策略，不要把它当成“随便放几个 toml / cfg 的目录”。
+
+在当前实现里，配置管理至少包含这几层：
+
+- catalog discovery：哪些目录受管、哪些文件会被扫描，不由业务代码临时 `glob` 决定，而由 registry 和 catalog 固定
+- metadata contract：每个受管 config 都必须带结构化 header，`config_id` 是主键，不是文件路径
+- kind-specific semantic validation：不同 kind 的 config 有各自的正文约束，不是“能 parse 就算过”
+- mmWave cfg integrity：受管 mmWave cfg 第一次进入 catalog 时会记录内容 hash，之后内容必须保持不变
+
+因此，改 `configs/` 时先分清楚什么能改，什么不能改。
+
+可以改的：
+
+- 新增一个 config 文件，只要它放在受管目录、header 完整、`config_id` 唯一
+- 修改 collection profile / global 这类 TOML 的正文，但必须仍满足该 kind 的字段契约
+- 新增一份 mmWave cfg，用新的 `config_id` 表达一条新配置路线
+- 在 profile 里改默认绑定关系，例如默认选中的 firmware cfg
+
+不能随手改的：
+
+- 不要直接改已有受管 mmWave cfg 的正文，把它当“原地继续调参数”的草稿
+- 不要复用已有 `config_id`
+- 不要在业务层写 `config_path` 或磁盘路径绕开 catalog
+- 不要把 header-only metadata 混回 TOML body
+- 不要把 active / template 文件长期放错目录角色
+
+正确改法：
+
+1. 先确定你改的是哪一类 config，以及它应该放在哪个受管目录。
+2. 先写对 header，再改正文；不要反过来。
+3. 如果是 collection profile / global，优先改正文里的业务字段，不要绕过 `config_id` 绑定。
+4. 如果是 mmWave cfg，新增需求优先新建一份 cfg，而不是直接修改已有已受管 cfg。
+5. 新 mmWave cfg 第一次进入 catalog 时，validation 会自动为“registry 中还没有记录”的 `config_id` 追加 hash。
+6. 一旦某个 mmWave cfg 已经有 hash 记录，后续 validation 只允许它内容不变；如果内容漂移，会直接报错而不会刷新 hash。
+
+当前 validation / hook 会检查这些事：
+
+- 受管目录里的 metadata header 是否可解析，`config_kind` 是否和目录角色一致
+- `config_id` 是否全局唯一
+- lifecycle 和目录角色是否冲突
+- header-only key 是否被误写进 TOML body
+- mmWave cfg 是否只使用 registry 允许的命令，命令顺序、参数个数和派生约束是否成立
+- collection global / profile 是否满足字段契约，引用的 `config_id` 是否能在 catalog 里解析
+- mmWave cfg integrity registry 是否缺项、是否有未知项、以及已有 hash 是否与实际内容一致
+
+处理 `configs/` 相关改动时，默认先跑：
+
+- `uv run python -m vassago.configs.validation`
+
+如果这一步失败，不要先猜业务逻辑，先把 config contract 修正到通过。
+
+## 10. Python 改动的默认验收
 
 只要改动涉及 Python 代码，默认验收至少应覆盖：
 
@@ -127,7 +180,7 @@ AI 当被要求制定实施计划时, 需要主动分析是否有可以用上现
 
 如果任务范围较大，或者无法明确缩小测试范围，则直接运行 `uv run pytest`。
 
-## 10. 静态检查豁免规则
+## 11. 静态检查豁免规则
 
 对 `ruff` 和 `pyright`，默认不要使用以下豁免手段：
 
@@ -143,7 +196,7 @@ AI 当被要求制定实施计划时, 需要主动分析是否有可以用上现
 - 具体位于哪个文件
 - 为什么不能直接通过更清晰的代码或类型建模解决
 
-## 11. Codex 的 Git 提权规则
+## 12. Codex 的 Git 提权规则
 
 在 Codex 沙箱里，`git add` 和 `git commit` 通常会被拦截。
 

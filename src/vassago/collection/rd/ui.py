@@ -39,7 +39,7 @@ def render_collection_profiles(
     table.add_column("Label")
     table.add_column("Batch Size", justify="right")
     table.add_column("Capture", justify="right")
-    table.add_column("Firmware Config")
+    table.add_column("Default Firmware Config")
     table.add_column("Description")
 
     for profile in profiles:
@@ -48,7 +48,7 @@ def render_collection_profiles(
             profile.label,
             str(profile.batch_size),
             f"{profile.capture_window_duration_s:.2f}s",
-            profile.firmware_config_id,
+            profile.default_firmware_config_id,
             profile.description,
         )
 
@@ -105,6 +105,15 @@ def render_session_summary(
     table.add_row("subject_name", str(manifest["subject_name"]))
     table.add_row("gesture", str(manifest["gesture"]))
     table.add_row("config_id", str(manifest["config_id"]))
+    config_snapshot = manifest.get("config_snapshot")
+    firmware_config_id = "-"
+    if isinstance(config_snapshot, dict):
+        firmware = config_snapshot.get("firmware")
+        if isinstance(firmware, dict):
+            raw_firmware_config_id = firmware.get("config_id")
+            if isinstance(raw_firmware_config_id, str) and raw_firmware_config_id:
+                firmware_config_id = raw_firmware_config_id
+    table.add_row("firmware_config_id", firmware_config_id)
     table.add_row("cli_port", str(manifest["cli_port"]))
     table.add_row("data_port", str(manifest["data_port"]))
     console.print(table)
@@ -203,7 +212,8 @@ def prompt_for_collection_profile(
             questionary.Choice(
                 title=(
                     f"{profile.label} [{profile.config_id}] "
-                    f"batch={profile.batch_size} fw={profile.firmware_config_id}"
+                    f"batch={profile.batch_size} "
+                    f"fw={profile.default_firmware_config_id}"
                 ),
                 value=profile,
             )

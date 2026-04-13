@@ -5,6 +5,7 @@ from __future__ import annotations
 import typer
 
 from vassago.collection.rd import cli as collection_rd_cli
+from vassago.configs import cli as configs_cli
 from vassago.firmware.mmwave import cli as mmwave_cli
 
 app = typer.Typer(
@@ -27,6 +28,13 @@ collection_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(collection_app, name="collection")
+
+configs_app = typer.Typer(
+    help="Repository-managed config tooling.",
+    no_args_is_help=True,
+)
+app.add_typer(configs_app, name="configs")
+configs_cli.register_commands(configs_app)
 
 mmwave_app = typer.Typer(
     help="TI-style mmWave UART tooling.",

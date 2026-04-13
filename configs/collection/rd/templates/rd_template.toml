@@ -12,7 +12,7 @@ batch_size = 12
 config_id = "rd_global_default"
 
 [firmware]
-config_id = "rd_candidate"
+default_config_id = "rd_candidate"
 
 # Optional overrides for repository-level defaults.
 # capture_window_duration_s = 5.0
