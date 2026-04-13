@@ -1,37 +1,46 @@
 min_version: 1.10.0
 
 pre-commit:
-  parallel: true
+  piped: true
   jobs:
-    - name: python-autofix
-      glob: "*.py"
+    - name: staged-mutators
       group:
         piped: true
         jobs:
-          - name: format
-            run: uv run ruff format {staged_files}
+          - name: python-autofix
+            glob: "*.py"
+            group:
+              piped: true
+              jobs:
+                - name: format
+                  run: uv run ruff format {staged_files}
+                  stage_fixed: true
+                - name: lint
+                  run: uv run ruff check --fix {staged_files}
+                  stage_fixed: true
+
+          - name: config-check
+            run: uv run vassago configs validate
             stage_fixed: true
-          - name: lint
-            run: uv run ruff check --fix {staged_files}
-            stage_fixed: true
 
-    - name: config-check
-      run: uv run python -m vassago.configs.validation
+    - name: read-only-checks
+      group:
+        parallel: true
+        jobs:
+          - name: collection-offline-qc
+            glob: "data/collection/rd/sessions/*/manifest.json"
+            run: >-
+              sh -c 'for manifest in "$@"; do
+              uv run vassago collection rd offline-qc --manifest "$manifest" || exit 1;
+              done' sh {staged_files}
 
-    - name: collection-offline-qc
-      glob: "data/collection/rd/sessions/*/manifest.json"
-      run: >-
-        sh -c 'for manifest in "$@"; do
-        uv run vassago collection rd offline-qc --manifest "$manifest" || exit 1;
-        done' sh {staged_files}
+          - name: typecheck
+            glob: "*.py"
+            run: uv run pyright
 
-    - name: typecheck
-      glob: "*.py"
-      run: uv run pyright
+          - name: test
+            glob: "*.py"
+            run: uv run pytest --testmon || [ $? -eq 5 ]  # 5 是 pytest 在没有测试文件时返回的退出代码
 
-    - name: test
-      glob: "*.py"
-      run: uv run pytest --testmon || [ $? -eq 5 ]  # 5 是 pytest 在没有测试文件时返回的退出代码
-
-    - name: code-stats
-      run: scc --ci src scripts docs
+          - name: code-stats
+            run: scc --ci src scripts docs
