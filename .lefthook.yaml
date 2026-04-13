@@ -1,32 +1,37 @@
+min_version: 1.10.0
+
 pre-commit:
-  commands:
-    format:
+  parallel: true
+  jobs:
+    - name: python-autofix
       glob: "*.py"
-      run: uv run ruff format {staged_files}
-      stage_fixed: true
+      group:
+        piped: true
+        jobs:
+          - name: format
+            run: uv run ruff format {staged_files}
+            stage_fixed: true
+          - name: lint
+            run: uv run ruff check --fix {staged_files}
+            stage_fixed: true
 
-    lint:
-      glob: "*.py"
-      run: uv run ruff check --fix {staged_files}
-      stage_fixed: true
-
-    config-check:
+    - name: config-check
       run: uv run python -m vassago.configs.validation
 
-    collection-offline-qc:
+    - name: collection-offline-qc
       glob: "data/collection/rd/sessions/*/manifest.json"
       run: >-
         sh -c 'for manifest in "$@"; do
         uv run vassago collection rd offline-qc --manifest "$manifest" || exit 1;
         done' sh {staged_files}
 
-    typecheck:
+    - name: typecheck
       glob: "*.py"
       run: uv run pyright
 
-    test:
+    - name: test
       glob: "*.py"
       run: uv run pytest --testmon || [ $? -eq 5 ]  # 5 是 pytest 在没有测试文件时返回的退出代码
 
-    code-stats:
+    - name: code-stats
       run: scc --ci src scripts docs

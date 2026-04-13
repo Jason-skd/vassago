@@ -200,15 +200,21 @@ lefthook install
 - `uv run pyright`
 - `uv run pytest --testmon || [ $? -eq 5 ]`
 - 对暂存区中的 `data/collection/rd/sessions/*/manifest.json` 逐个执行 `uv run vassago collection rd offline-qc --manifest <manifest>`
+- `uv run python -m vassago.configs.validation`
+- `scc --ci src scripts docs`
 
 这里的行为可以概括为：
 
 - 对暂存区中的 Python 文件做自动格式化
 - 对暂存区中的 Python 文件执行 lint，并自动修复可修复问题
 - 对暂存区中的 RD collection session manifest 做离线 QC，阻止带 `error` 的 session 数据被直接提交
+- 对配置注册表做一次全局一致性校验
 - 对整个项目执行一次 `pyright` 类型检查，确保命令行结果与 VS Code Pylance 基本对齐
 - 对整个项目调用一次 `pytest-testmon`，由 `testmon` 自己选择受改动影响的测试
+- 输出一次仓库代码规模统计，作为提交前的轻量可观测性信息
 - 如果当前仓库还没有测试、`pytest` 返回退出码 `5`，hook 不会因此阻塞提交
+
+这些检查里，`ruff format` 和 `ruff check --fix` 会串行执行，原因是它们都会修改同一批暂存区 Python 文件；其余只读或互不干扰的步骤会并行执行，以减少一次 `pre-commit` 的总耗时。
 
 这里特意没有把 `ruff format` 和 `ruff check --fix` 改成全仓执行，因为它们会直接修改文件。提交前只处理暂存区中的 Python 文件，可以避免顺手改动未提交主题之外的文件。
 
