@@ -30,7 +30,6 @@ def test_collection_list_configs_command_renders_sample_profile(
                 description="Short description",
                 global_config_id="rd_global_default",
                 batch_size=1,
-                default_firmware_config_id="rd_candidate",
                 defaults=collection_config.CollectionDefaults(
                     hand="right",
                     distance_m=0.5,
@@ -38,6 +37,7 @@ def test_collection_list_configs_command_renders_sample_profile(
                     environment="office_lab",
                     radar_id="radar_01",
                     firmware_id="fw_01",
+                    firmware_config_id="rd_candidate",
                 ),
                 serial=collection_config.CollectionSerialDefaults(
                     cli_port=None,
@@ -107,10 +107,14 @@ def test_collection_init_session_command_writes_manifest(tmp_path) -> None:
     manifest = collection_session.load_manifest(manifests[0])
     assert manifest["gesture_options"] == list(profile.gestures)
     assert manifest["environment_options"] == list(profile.environments)
+    assert manifest["firmware_config_id"] == "rd_pointcloud_dual"
+    assert "config_id" not in manifest
     config_snapshot = manifest["config_snapshot"]
     assert isinstance(config_snapshot, dict)
     assert config_snapshot["batch_size"] == profile.batch_size
-    assert config_snapshot["firmware"] == {"config_id": "rd_pointcloud_dual"}
+    defaults = config_snapshot["defaults"]
+    assert isinstance(defaults, dict)
+    assert defaults["firmware_config_id"] == "rd_pointcloud_dual"
 
 
 def test_collection_init_session_command_allows_firmware_cfg_override(tmp_path) -> None:
@@ -152,9 +156,12 @@ def test_collection_init_session_command_allows_firmware_cfg_override(tmp_path) 
     assert result.exit_code == 0
     assert len(manifests) == 1
     manifest = collection_session.load_manifest(manifests[0])
+    assert manifest["firmware_config_id"] == "rd_candidate"
     config_snapshot = manifest["config_snapshot"]
     assert isinstance(config_snapshot, dict)
-    assert config_snapshot["firmware"] == {"config_id": "rd_candidate"}
+    defaults = config_snapshot["defaults"]
+    assert isinstance(defaults, dict)
+    assert defaults["firmware_config_id"] == profile.default_firmware_config_id
 
 
 def test_interactive_init_session_prompts_operator_name_without_default(
@@ -263,7 +270,6 @@ def test_run_session_accepts_take_and_updates_manifest(tmp_path, monkeypatch) ->
         ),
         sessions_root=tmp_path,
     )
-    manifest["batch_size"] = 1
     takes = manifest["takes"]
     assert isinstance(takes, list)
     manifest["takes"] = takes[:1]

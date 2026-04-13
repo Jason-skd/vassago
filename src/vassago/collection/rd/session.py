@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 DEFAULT_SESSIONS_ROOT = Path("data/collection/rd/sessions")
 MANIFEST_FILENAME = "manifest.json"
 RAW_UART_FILENAME = "raw_uart.bin"
-SESSION_SCHEMA_VERSION = "collection_rd_session_v4"
+SESSION_SCHEMA_VERSION = "collection_rd_session_v6"
 SESSION_STATUS_PLANNED = "planned"
 SESSION_STATUS_IN_PROGRESS = "in_progress"
 SESSION_STATUS_COMPLETED = "completed"
@@ -108,7 +108,6 @@ def build_session_manifest(
         "created_at": created_at,
         "updated_at": created_at,
         "session_status": SESSION_STATUS_PLANNED,
-        "batch_size": profile.batch_size,
         "subject_name": session_input.subject_name,
         "hand": session_input.hand,
         "distance_m": session_input.distance_m,
@@ -118,16 +117,14 @@ def build_session_manifest(
         "note": session_input.note,
         "radar_id": session_input.radar_id,
         "firmware_id": session_input.firmware_id,
+        "firmware_config_id": session_input.firmware_config_id,
         "gesture": session_input.gesture,
         "gesture_options": list(profile.gestures),
         "environment_options": list(profile.environments),
-        "config_id": profile.config_id,
         "cli_port": session_input.cli_port,
         "data_port": session_input.data_port,
         "data_baudrate": session_input.data_baudrate,
-        "config_snapshot": profile.as_snapshot(
-            firmware_config_id=session_input.firmware_config_id,
-        ),
+        "config_snapshot": profile.as_snapshot(),
         "takes": build_take_plan(batch_size=profile.batch_size),
     }
 
@@ -222,6 +219,11 @@ def count_remaining_takes(manifest: JsonObject) -> int:
         for take in _require_takes(manifest)
         if _require_str(take, "status") != TAKE_STATUS_ACCEPTED
     )
+
+
+def count_total_takes(manifest: JsonObject) -> int:
+    """Count planned takes from one manifest."""
+    return len(_require_takes(manifest))
 
 
 def next_pending_take(manifest: JsonObject) -> JsonObject | None:

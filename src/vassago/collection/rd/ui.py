@@ -104,15 +104,30 @@ def render_session_summary(
     table.add_row("session_status", str(manifest["session_status"]))
     table.add_row("subject_name", str(manifest["subject_name"]))
     table.add_row("gesture", str(manifest["gesture"]))
-    table.add_row("config_id", str(manifest["config_id"]))
     config_snapshot = manifest.get("config_snapshot")
+    profile_config_id = "-"
+    default_firmware_config_id = "-"
     firmware_config_id = "-"
     if isinstance(config_snapshot, dict):
-        firmware = config_snapshot.get("firmware")
-        if isinstance(firmware, dict):
-            raw_firmware_config_id = firmware.get("config_id")
-            if isinstance(raw_firmware_config_id, str) and raw_firmware_config_id:
-                firmware_config_id = raw_firmware_config_id
+        raw_profile_config_id = config_snapshot.get("config_id")
+        if isinstance(raw_profile_config_id, str) and raw_profile_config_id:
+            profile_config_id = raw_profile_config_id
+        defaults = config_snapshot.get("defaults")
+        if isinstance(defaults, dict):
+            raw_default_firmware_config_id = defaults.get("firmware_config_id")
+            if (
+                isinstance(raw_default_firmware_config_id, str)
+                and raw_default_firmware_config_id
+            ):
+                default_firmware_config_id = raw_default_firmware_config_id
+    raw_top_level_firmware_config_id = manifest.get("firmware_config_id")
+    if (
+        isinstance(raw_top_level_firmware_config_id, str)
+        and raw_top_level_firmware_config_id
+    ):
+        firmware_config_id = raw_top_level_firmware_config_id
+    table.add_row("profile_config_id", profile_config_id)
+    table.add_row("default_firmware_config_id", default_firmware_config_id)
     table.add_row("firmware_config_id", firmware_config_id)
     table.add_row("cli_port", str(manifest["cli_port"]))
     table.add_row("data_port", str(manifest["data_port"]))

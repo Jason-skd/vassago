@@ -134,7 +134,8 @@ uv run vassago collection rd offline-qc --manifest <manifest.json>
 典型 error 包括：
 
 - manifest 顶层缺少公共 contract 字段
-- top-level `gesture_options` / `environment_options` / `batch_size` 与 snapshot 不一致
+- top-level `firmware_config_id` / `gesture_options` / `environment_options` 与 snapshot 不一致
+- `takes` 长度与 `config_snapshot.batch_size` 不一致
 - `gesture` 或 `environment` 不属于 snapshot 提供的 allowed options
 - accepted take 缺少 `raw_uart_path`、`capture_window`、`target_window`
 - accepted take 对应的 `raw_uart.bin` 不存在
@@ -179,7 +180,7 @@ uv run vassago collection rd offline-qc --manifest <manifest.json>
 
 优先检查 manifest 顶层是否有这些字段：
 
-- `batch_size`
+- `firmware_config_id`
 - `gesture_options`
 - `environment_options`
 - `takes`
@@ -187,6 +188,7 @@ uv run vassago collection rd offline-qc --manifest <manifest.json>
 再检查 `config_snapshot` 是否有这些字段：
 
 - `batch_size`
+- `config_id`
 - `runtime.*`
 - `defaults.*`
 - `serial.*`

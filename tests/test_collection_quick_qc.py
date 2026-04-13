@@ -7,9 +7,10 @@ from vassago.firmware.mmwave.protocol import SmokeTestSummary
 
 
 def test_manifest_top_level_qc_contract_exposes_option_mirrors() -> None:
-    assert "batch_size" in qc_contract.MANIFEST_TOP_LEVEL_EXTRACT_FIELDS
+    assert "firmware_config_id" in qc_contract.MANIFEST_TOP_LEVEL_EXTRACT_FIELDS
     assert "gesture_options" in qc_contract.MANIFEST_TOP_LEVEL_EXTRACT_FIELDS
     assert "environment_options" in qc_contract.MANIFEST_TOP_LEVEL_EXTRACT_FIELDS
+    assert "batch_size" not in qc_contract.MANIFEST_TOP_LEVEL_EXTRACT_FIELDS
 
     comparison_rules = {
         rule.top_level_field: rule
@@ -17,8 +18,8 @@ def test_manifest_top_level_qc_contract_exposes_option_mirrors() -> None:
     }
 
     assert (
-        comparison_rules["batch_size"].mismatch_severity
-        == qc_contract.QC_SEVERITY_ERROR
+        comparison_rules["firmware_config_id"].mismatch_severity
+        == qc_contract.QC_SEVERITY_WARN
     )
     assert (
         comparison_rules["gesture_options"].mismatch_severity

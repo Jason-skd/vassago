@@ -182,7 +182,7 @@ configs/
 - active 文件不该长期放在 `templates/`
 - template 文件不该长期放在正式 `profiles/`
 
-### `firmware.config_id` 和磁盘路径
+### mmWave cfg `config_id` 和磁盘路径
 
 区分方式：
 
@@ -230,7 +230,7 @@ mmWave `.cfg` 用 `%` 注释头，TOML 用 `#` 注释头。不要混用。
 1. 跑全量校验
 
 ```bash
-uv run python -m vassago.configs.validation
+uv run vassago configs validate
 ```
 
 2. 如果你改的是 collection profile 或 mmWave cfg，再跑对应消费命令确认它真的还能被业务流程读到

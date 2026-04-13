@@ -20,11 +20,15 @@ from rich.console import Console
 from vassago.collection.rd import quick_qc
 from vassago.collection.rd import session as collection_session
 from vassago.collection.rd import ui as collection_ui
+from vassago.collection.rd import visualizer
 from vassago.collection.rd.config import WindowRange
 from vassago.collection.rd.paths import resolve_repo_path
 from vassago.firmware.mmwave import config as mmwave_config
+from vassago.firmware.mmwave.protocol import MmwavePacket
+from vassago.firmware.mmwave.protocol import MmwavePacketParser
 from vassago.firmware.mmwave.protocol import SmokeTestSummary
 from vassago.firmware.mmwave.protocol import SmokeTestSummaryAccumulator
+from vassago.firmware.mmwave.protocol import summarize_packets
 from vassago.firmware.mmwave.smoke_test import DEFAULT_READ_SIZE
 from vassago.firmware.mmwave.smoke_test import DEFAULT_READ_TIMEOUT_SECONDS
 from vassago.firmware.mmwave.smoke_test import send_config
@@ -106,6 +110,7 @@ class ReviewedTakeCapture:
 
 
 type CaptureByteConsumer = Callable[[bytes], None]
+type CapturePacketConsumer = Callable[[tuple[MmwavePacket, ...]], None]
 
 
 @dataclass(slots=True, frozen=True)
@@ -136,12 +141,15 @@ class _CaptureRuntime:
     read_size: int
     raw_capture: bytearray
     byte_consumers: tuple[CaptureByteConsumer, ...]
+    packet_parser: MmwavePacketParser | None
+    packet_consumers: tuple[CapturePacketConsumer, ...]
 
 
 def run_session(
     manifest_path: Path,
     *,
     read_size: int = DEFAULT_READ_SIZE,
+    enable_visualizer: bool = False,
 ) -> RunSessionSummary:
     """Run or resume one collection session until completion or interruption."""
     resolved_manifest_path = resolve_repo_path(manifest_path)
@@ -177,6 +185,7 @@ def run_session(
             manifest_path=resolved_manifest_path,
             manifest=manifest,
             read_size=read_size,
+            enable_visualizer=enable_visualizer,
         )
     except BaseException:
         collection_session.update_session_status(
@@ -226,6 +235,7 @@ def _run_take_loop(
     manifest_path: Path,
     manifest: collection_session.JsonObject,
     read_size: int,
+    enable_visualizer: bool,
 ) -> None:
     """Drive the operator state machine across all remaining takes."""
     data_port = _require_str(manifest, "data_port")
@@ -247,7 +257,7 @@ def _run_take_loop(
             attempt_plan = _build_attempt_plan(manifest)
             take_index = _require_int(take, "take_index")
             take_id = _require_str(take, "take_id")
-            batch_size = _require_int(manifest, "batch_size")
+            batch_size = collection_session.count_total_takes(manifest)
             collection_ui.render_take_state(
                 console,
                 take_id=take_id,
@@ -271,6 +281,7 @@ def _run_take_loop(
                 connection,
                 attempt_plan=attempt_plan,
                 read_size=read_size,
+                enable_visualizer=enable_visualizer,
             )
             collection_ui.render_quick_qc(
                 console,
@@ -320,16 +331,31 @@ def review_capture_take(
     *,
     attempt_plan: AttemptPlan,
     read_size: int,
+    enable_visualizer: bool = False,
 ) -> ReviewedTakeCapture:
     """Capture one take and run the current summary/QC pipeline inline."""
-    summary_accumulator = SmokeTestSummaryAccumulator()
-    capture_result = capture_take(
-        connection,
-        attempt_plan=attempt_plan,
-        read_size=read_size,
-        byte_consumers=(summary_accumulator.feed,),
+    packet_parser = MmwavePacketParser()
+    packets: list[MmwavePacket] = []
+    visualizer_session = visualizer.start_visualizer(enabled=enable_visualizer)
+    try:
+        capture_result = capture_take(
+            connection,
+            attempt_plan=attempt_plan,
+            read_size=read_size,
+            packet_parser=packet_parser,
+            packet_consumers=(
+                packets.extend,
+                visualizer_session.consume_packets,
+            ),
+        )
+    finally:
+        visualizer_session.close()
+
+    summary = summarize_packets(
+        packets=packets,
+        bytes_read=len(capture_result.raw_capture),
+        invalid_packet_count=packet_parser.invalid_packet_count,
     )
-    summary = summary_accumulator.build_summary()
     qc_decision = quick_qc.evaluate_capture(
         summary=summary,
         capture_window=capture_result.capture_window,
@@ -352,6 +378,8 @@ def capture_take(
     attempt_plan: AttemptPlan,
     read_size: int,
     byte_consumers: Iterable[CaptureByteConsumer] = (),
+    packet_parser: MmwavePacketParser | None = None,
+    packet_consumers: Iterable[CapturePacketConsumer] = (),
 ) -> TakeCaptureResult:
     """Capture one attempt with fixed countdown, GO, and hidden capture start."""
     console.print("state: countdown")
@@ -366,6 +394,8 @@ def capture_take(
         read_size=read_size,
         raw_capture=bytearray(),
         byte_consumers=tuple(byte_consumers),
+        packet_parser=packet_parser,
+        packet_consumers=tuple(packet_consumers),
     )
 
     original_timeout = connection.timeout
@@ -391,11 +421,7 @@ def capture_take(
 
     console.print("capture_window ended")
     trailing_bytes = read_available_bytes(connection, read_size=read_size)
-    _record_capture_bytes(
-        runtime.raw_capture,
-        chunk=trailing_bytes,
-        byte_consumers=runtime.byte_consumers,
-    )
+    _record_capture_bytes(runtime, chunk=trailing_bytes)
     return TakeCaptureResult(
         raw_capture=bytes(runtime.raw_capture),
         capture_window=attempt_plan.capture_window,
@@ -521,11 +547,7 @@ def _capture_window_finished(
         return True
 
     chunk = runtime.connection.read(runtime.read_size)
-    _record_capture_bytes(
-        runtime.raw_capture,
-        chunk=chunk,
-        byte_consumers=runtime.byte_consumers,
-    )
+    _record_capture_bytes(runtime, chunk=chunk)
     _poll_capture_marker(
         marker=marker,
         capture_duration_s=attempt_plan.capture_window.end_s,
@@ -550,17 +572,32 @@ def _poll_capture_marker(
 
 
 def _record_capture_bytes(
-    raw_capture: bytearray,
+    runtime: _CaptureRuntime,
     *,
     chunk: bytes,
-    byte_consumers: tuple[CaptureByteConsumer, ...],
 ) -> None:
     """Append one raw chunk and broadcast it to any inline consumers."""
     if not chunk:
         return
-    raw_capture.extend(chunk)
-    for consumer in byte_consumers:
+    runtime.raw_capture.extend(chunk)
+    for consumer in runtime.byte_consumers:
         consumer(chunk)
+    _broadcast_capture_packets(runtime, chunk=chunk)
+
+
+def _broadcast_capture_packets(
+    runtime: _CaptureRuntime,
+    *,
+    chunk: bytes,
+) -> None:
+    """Parse one raw chunk once and fan out any complete packets."""
+    if runtime.packet_parser is None:
+        return
+    packets = tuple(runtime.packet_parser.feed(chunk))
+    if not packets:
+        return
+    for consumer in runtime.packet_consumers:
+        consumer(packets)
 
 
 def _render_go_prompt() -> None:
@@ -681,11 +718,10 @@ def _emit_countdown_tick(
 
 def _configure_radar(manifest: collection_session.JsonObject) -> None:
     """Send the configured cfg to the radar before starting the session."""
+    config_id = _load_firmware_config_id(manifest)
     config_snapshot = _require_dict(manifest, "config_snapshot")
-    firmware = _require_dict(config_snapshot, "firmware")
     serial_defaults = _require_dict(config_snapshot, "serial")
 
-    config_id = _require_str(firmware, "config_id")
     config_path = mmwave_config.get_known_config(config_id).path.resolve()
     cli_baudrate = _require_int(serial_defaults, "cli_baudrate")
     cli_port = _require_str(manifest, "cli_port")
@@ -698,6 +734,11 @@ def _configure_radar(manifest: collection_session.JsonObject) -> None:
         stream_output=False,
     )
     validate_cli_session(session)
+
+
+def _load_firmware_config_id(manifest: collection_session.JsonObject) -> str:
+    """Load the runtime-selected firmware cfg id from the manifest contract."""
+    return _require_str(manifest, "firmware_config_id")
 
 
 def _require_dict(

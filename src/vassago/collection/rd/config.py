@@ -19,7 +19,7 @@ from vassago.configs.paths import resolve_repo_path
 if TYPE_CHECKING:
     from vassago.configs.models import ConfigMetadata
 
-CONFIG_SCHEMA_VERSION = "collection_rd_config_v4"
+CONFIG_SCHEMA_VERSION = "collection_rd_config_v5"
 DEFAULT_BATCH_SIZE = 20
 DEFAULT_CAPTURE_WINDOW_DURATION_SECONDS = 5.0
 DEFAULT_COUNTDOWN_DURATION_SECONDS = 5.0
@@ -55,6 +55,7 @@ class CollectionDefaults:
     environment: str
     radar_id: str
     firmware_id: str
+    firmware_config_id: str
 
     def as_dict(self) -> dict[str, object]:
         """Convert defaults to a JSON-ready mapping."""
@@ -65,6 +66,7 @@ class CollectionDefaults:
             "environment": self.environment,
             "radar_id": self.radar_id,
             "firmware_id": self.firmware_id,
+            "firmware_config_id": self.firmware_config_id,
         }
 
 
@@ -124,7 +126,6 @@ class CollectionProfile:
     description: str
     global_config_id: str
     batch_size: int
-    default_firmware_config_id: str
     defaults: CollectionDefaults
     serial: CollectionSerialDefaults
     gestures: tuple[str, ...]
@@ -140,6 +141,11 @@ class CollectionProfile:
         """Compatibility alias for callers that still say capture_duration."""
         return self.capture_window_duration_s
 
+    @property
+    def default_firmware_config_id(self) -> str:
+        """Return the default firmware cfg id carried by this profile."""
+        return self.defaults.firmware_config_id
+
     def target_window_duration_for(self, *, gesture: str) -> float:
         """Resolve the configured target-window duration for one gesture."""
         for target_duration in self.gesture_target_durations:
@@ -149,17 +155,8 @@ class CollectionProfile:
         msg = f"Target-window duration is not defined for gesture={gesture!r}."
         raise KeyError(msg)
 
-    def as_snapshot(
-        self,
-        *,
-        firmware_config_id: str | None = None,
-    ) -> dict[str, object]:
+    def as_snapshot(self) -> dict[str, object]:
         """Build the manifest snapshot for this profile."""
-        selected_firmware_config_id = (
-            firmware_config_id
-            if firmware_config_id is not None
-            else self.default_firmware_config_id
-        )
         return {
             "schema_version": CONFIG_SCHEMA_VERSION,
             "config_id": self.config_id,
@@ -174,9 +171,6 @@ class CollectionProfile:
                 "countdown_duration_s": self.countdown_duration_s,
                 "marked_window_end_grace_s": self.marked_window_end_grace_s,
                 "end_mark_key": self.end_mark_key,
-            },
-            "firmware": {
-                "config_id": selected_firmware_config_id,
             },
             "defaults": self.defaults.as_dict(),
             "serial": self.serial.as_dict(),
@@ -261,7 +255,10 @@ def load_collection_profile(
         catalog=resolved_catalog,
     )
     batch_size = _load_batch_size(data, resolved_path=resolved_path)
-    default_firmware_config_id = _load_firmware_binding(data)
+    defaults = _load_defaults(
+        data, resolved_catalog=resolved_catalog, resolved_path=resolved_path
+    )
+    default_firmware_config_id = defaults.firmware_config_id
     _require_mmwave_config(default_firmware_config_id, catalog=resolved_catalog)
     capture_window_duration_s = _load_capture_window_duration_s(
         data,
@@ -283,7 +280,6 @@ def load_collection_profile(
         global_config=global_config,
         resolved_path=resolved_path,
     )
-    defaults = _load_defaults(data, resolved_path=resolved_path)
     serial = _load_serial_defaults(
         profile_data=data,
         global_config=global_config,
@@ -308,7 +304,6 @@ def load_collection_profile(
         description=metadata.description,
         global_config_id=global_config_id,
         batch_size=batch_size,
-        default_firmware_config_id=default_firmware_config_id,
         defaults=defaults,
         serial=serial,
         gestures=gestures,
@@ -447,24 +442,6 @@ def _load_batch_size(
     return batch_size
 
 
-def _load_firmware_binding(data: dict[str, Any]) -> str:
-    firmware_table = _require_table(data, "firmware")
-    if "config_path" in firmware_table:
-        msg = (
-            "firmware.config_path is forbidden; use firmware.default_config_id instead."
-        )
-        raise ValueError(msg)
-    if "default_config_id" in firmware_table and "config_id" in firmware_table:
-        msg = (
-            "Use either firmware.default_config_id or the legacy "
-            "firmware.config_id, not both."
-        )
-        raise ValueError(msg)
-    if "default_config_id" in firmware_table:
-        return _require_str(firmware_table, "default_config_id")
-    return _require_str(firmware_table, "config_id")
-
-
 def _require_mmwave_config(
     config_id: str,
     *,
@@ -545,9 +522,16 @@ def _load_end_mark_key(
 def _load_defaults(
     data: dict[str, Any],
     *,
+    resolved_catalog: ConfigCatalog,
     resolved_path: Path,
 ) -> CollectionDefaults:
     defaults_table = _require_table(data, "defaults")
+    default_firmware_config_id = _load_default_firmware_config_id(
+        data=data,
+        defaults_table=defaults_table,
+        resolved_catalog=resolved_catalog,
+        resolved_path=resolved_path,
+    )
     defaults = CollectionDefaults(
         hand=_require_str(defaults_table, "hand"),
         distance_m=_optional_float(defaults_table.get("distance_m")),
@@ -555,11 +539,35 @@ def _load_defaults(
         environment=_require_str(defaults_table, "environment"),
         radar_id=_require_str(defaults_table, "radar_id"),
         firmware_id=_require_str(defaults_table, "firmware_id"),
+        firmware_config_id=default_firmware_config_id,
     )
     if defaults.hand not in {"left", "right"}:
         msg = f"defaults.hand must be left or right in {resolved_path}"
         raise ValueError(msg)
     return defaults
+
+
+def _load_default_firmware_config_id(
+    *,
+    data: dict[str, Any],
+    defaults_table: dict[str, Any],
+    resolved_catalog: ConfigCatalog,
+    resolved_path: Path,
+) -> str:
+    if "firmware" in data:
+        msg = (
+            "Profile [firmware] section is no longer supported; use "
+            "defaults.firmware_config_id instead."
+        )
+        raise ValueError(msg)
+
+    raw_defaults_config_id = defaults_table.get("firmware_config_id")
+    if isinstance(raw_defaults_config_id, str) and raw_defaults_config_id:
+        _require_mmwave_config(raw_defaults_config_id, catalog=resolved_catalog)
+        return raw_defaults_config_id
+
+    msg = f"defaults.firmware_config_id must be defined in {resolved_path}"
+    raise ValueError(msg)
 
 
 def _load_global_serial_defaults(

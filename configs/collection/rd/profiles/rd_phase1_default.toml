@@ -5,14 +5,11 @@
 # description = "Default RD collection profile for the current UART-first workflow."
 # lifecycle = "active"
 # ---
-schema_version = "collection_rd_profile_v2"
+schema_version = "collection_rd_profile_v3"
 batch_size = 80
 
 [global]
 config_id = "rd_global_default"
-
-[firmware]
-default_config_id = "rd_pointcloud_dual"
 
 [defaults]
 hand = "right"
@@ -21,6 +18,7 @@ angle_deg = 180.0
 environment = "office_lab"
 radar_id = "rd_aop_01"
 firmware_id = "rd_phase1_uart"
+firmware_config_id = "rd_pointcloud_dual"
 
 [options]
 gestures = ["wave", "circle_cw", "flip"]

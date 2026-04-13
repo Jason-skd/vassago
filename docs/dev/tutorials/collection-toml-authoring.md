@@ -64,7 +64,7 @@
 - `label`
 - `description`
 - `batch_size`
-- `[firmware].default_config_id`
+- `defaults.firmware_config_id`
 - `[defaults]`
 - `[options]`
 - `[gesture_target_durations]`
@@ -85,7 +85,7 @@
 1. 复制 `configs/collection/rd/templates/rd_template.toml`
 2. 改文件头元数据
 3. 填 `global.config_id`
-4. 填 `firmware.default_config_id`
+4. 填 `defaults.firmware_config_id`
 5. 填 `[defaults]`、`[options]`、`[gesture_target_durations]`
 6. 除非你非常明确知道为什么要覆盖 global，否则不要加运行时 override
 
@@ -99,14 +99,11 @@
 # description = "Meeting-room round for phase-1 swipe/push collection."
 # lifecycle = "active"
 # ---
-schema_version = "collection_rd_profile_v2"
+schema_version = "collection_rd_profile_v3"
 batch_size = 12
 
 [global]
 config_id = "rd_global_default"
-
-[firmware]
-default_config_id = "rd_pointcloud_dual"
 
 [defaults]
 hand = "right"
@@ -115,6 +112,7 @@ angle_deg = 0.0
 environment = "meeting_room"
 radar_id = "rd_aop_01"
 firmware_id = "rd_phase1_uart"
+firmware_config_id = "rd_pointcloud_dual"
 
 [options]
 gestures = ["swipe_left", "swipe_right", "push"]
@@ -170,7 +168,7 @@ push = 1.8
 #### `schema_version`
 
 - 含义：profile 正文采用的 schema 版本标记。
-- 怎么填：直接沿用模板当前值。当前模板里是 `collection_rd_profile_v2`。
+- 怎么填：直接沿用模板当前值。当前模板里是 `collection_rd_profile_v3`。
 - 最重要的原则：不要为了某一份 profile 自己发明一个新字符串。
 - 补充：这和 session manifest 里的 `schema_version` 不是同一个东西。
 
@@ -181,7 +179,7 @@ push = 1.8
 - 例子：希望最终拿到 12 个 accepted take，就写 `12`。
 - 容易误解的点：它不是“尝试次数上限”。reject 的 take 不算 accepted，系统会继续直到攒够 accepted take。
 - 约束：必须是正整数。
-- 当前 manifest 契约：session 初始化时，它会同时写到 manifest 顶层 `batch_size` 和 `config_snapshot.batch_size`。
+- 当前 manifest 契约：session 初始化时，它会写到 `config_snapshot.batch_size`，并按这个值展开 manifest 里的 `takes` 计划列表。
 
 ### 4.3 `[global]`
 
@@ -195,11 +193,7 @@ push = 1.8
 - 大多数情况下怎么做：如果你没有在做全局基线分叉，直接填 `rd_global_default`。
 - 不要做：不要写文件路径，不要把 global 的字段整段复制进 profile 只是为了“看起来完整”。
 
-### 4.4 `[firmware]`
-
-这一段决定“这轮采集前，要向设备发送哪份 repo-managed mmWave cfg”。
-
-#### `firmware.default_config_id`
+#### `defaults.firmware_config_id`
 
 - 含义：给 session 初始化时的 firmware cfg 方向键列表提供一个默认选中值。
 - 怎么填：填你希望默认高亮的 cfg `config_id`。
@@ -210,13 +204,15 @@ push = 1.8
 运行时行为：
 
 - 交互式 `init-session` 会读取当前所有 active mmWave cfg，给操作员一个方向键列表
-- `default_config_id` 只决定这个列表默认高亮哪一项
-- 本次 session 真正选中的 cfg 会写进 manifest snapshot 里的 `firmware.config_id`
+- `defaults.firmware_config_id` 只决定这个列表默认高亮哪一项
+- 本次 session 真正选中的 cfg 会写进 manifest 顶层 `firmware_config_id`
+- snapshot 里的 `config_snapshot.defaults.firmware_config_id` 保留 profile 默认 baseline
 
 非常重要的区分：
 
-- `[firmware].default_config_id` 是“session 初始化时，firmware cfg 列表默认选哪一项”
-- manifest snapshot 里的 `firmware.config_id` 是“这次 session 实际加载了哪份 mmWave cfg”
+- `defaults.firmware_config_id` 是“session 初始化时，firmware cfg 列表默认选哪一项”
+- manifest 顶层 `firmware_config_id` 是“这次 session 实际加载了哪份 mmWave cfg”
+- manifest snapshot 里的 `defaults.firmware_config_id` 是 profile 默认 baseline，不一定等于本次实际选择值
 - `defaults.firmware_id` 是“写进 manifest 的固件/版本标签”
 
 这两个字段不是一回事。
@@ -424,9 +420,9 @@ push = 1.8
 - `config_id` 才是仓库管理配置时真正依赖的主键。
 - 最好让二者主题一致，但不要把它们当成同一个东西。
 
-### `[firmware].default_config_id` vs `defaults.firmware_id`
+### `defaults.firmware_config_id` vs `defaults.firmware_id`
 
-- `[firmware].default_config_id` 决定交互式 session 初始化时，默认高亮哪份 mmWave `.cfg`。
+- `defaults.firmware_config_id` 决定交互式 session 初始化时，默认高亮哪份 mmWave `.cfg`。
 - `defaults.firmware_id` 只是 session 初始化时写入 manifest 的默认标签，更像“这轮数据对应的固件版本说明”。
 
 ### `global.toml` vs profile 顶层 override
@@ -462,7 +458,11 @@ push = 1.8
 最关键的落盘关系如下：
 
 - `batch_size`
-  会同时出现在 manifest 顶层 `batch_size` 和 `config_snapshot.batch_size`
+  只保留在 `config_snapshot.batch_size`；manifest 的实际 take 计划由 `takes` 列表本身表达
+- profile `config_id`
+  只保留在 `config_snapshot.config_id`；如果界面要展示，应明确标成 `profile_config_id`
+- `defaults.firmware_config_id`
+  是 profile 默认 cfg；本次 session 最终选中的结果会写到 manifest 顶层 `firmware_config_id`，而 `config_snapshot.defaults.firmware_config_id` 保留默认 baseline
 - `[defaults]`
   snapshot 保留默认值来源；操作员最终选定的实际 session 值写到 manifest 顶层
 - `[options]`
@@ -508,7 +508,7 @@ push = 1.8
 
 如果是：
 
-- 去 `[firmware].default_config_id`
+- 去 `defaults.firmware_config_id`
 - 去 `configs/firmware/mmwave/*.cfg` 找目标文件的 `config_id`
 
 ### “这是 CLI 创建 session 时要给操作员的默认值吗？”
@@ -539,7 +539,7 @@ push = 1.8
 4. `config_id` 稳定、可读、唯一
 5. `lifecycle` 与文件角色一致
 6. `global.config_id` 指向存在的 global 配置
-7. `firmware.default_config_id` 指向存在的 mmWave cfg
+7. `defaults.firmware_config_id` 指向存在的 mmWave cfg
 8. `defaults.environment` 出现在 `options.environments` 里
 9. `options.gestures` 与 `gesture_target_durations` 完整对齐
 10. 如果没有明确理由，没有额外覆盖 global 的运行时字段
@@ -547,7 +547,7 @@ push = 1.8
 如果你想做机器校验，可以运行：
 
 ```bash
-uv run python -m vassago.configs.validation
+uv run vassago configs validate
 ```
 
 如果你想确认 active profile 是否能被 CLI 正常列出来，可以运行：

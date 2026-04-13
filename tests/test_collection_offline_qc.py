@@ -66,6 +66,25 @@ def test_run_metadata_qc_flags_missing_top_level_field_and_default_drift(
     ) == ("hand",)
 
 
+def test_run_metadata_qc_warns_on_firmware_config_id_default_drift(tmp_path) -> None:
+    manifest_path, manifest = _write_manifest(tmp_path)
+    manifest["firmware_config_id"] = "other_mmwave_cfg"
+
+    report = metadata_qc.run_metadata_qc(
+        OfflineQcSessionContext(
+            manifest_path=manifest_path,
+            manifest=manifest,
+        )
+    )
+
+    assert tuple(
+        finding.code for finding in report.findings_for(severity=QC_SEVERITY_WARN)
+    ) == (metadata_qc.CODE_SNAPSHOT_MISMATCH,)
+    assert tuple(
+        finding.field_path for finding in report.findings_for(severity=QC_SEVERITY_WARN)
+    ) == ("firmware_config_id",)
+
+
 def test_run_offline_qc_replays_quick_qc_for_valid_accepted_take(tmp_path) -> None:
     manifest_path, _manifest = _write_manifest(tmp_path)
 
@@ -169,8 +188,8 @@ def _build_valid_manifest(
         "note": "pilot",
         "radar_id": "radar_01",
         "firmware_id": "fw_01",
+        "firmware_config_id": "stub_mmwave_cfg",
         "gesture": "swipe_left",
-        "batch_size": 1,
         "gesture_options": ["swipe_left", "swipe_right"],
         "environment_options": ["office_lab", "hallway"],
         "cli_port": "/dev/cli",
@@ -203,9 +222,6 @@ def _build_valid_manifest(
             "global": {
                 "config_id": "stub_global",
             },
-            "firmware": {
-                "config_id": "stub_mmwave_cfg",
-            },
             "runtime": {
                 "capture_window_duration_s": 5.0,
                 "countdown_duration_s": 5.0,
@@ -219,6 +235,7 @@ def _build_valid_manifest(
                 "environment": "office_lab",
                 "radar_id": "radar_01",
                 "firmware_id": "fw_01",
+                "firmware_config_id": "stub_mmwave_cfg",
             },
             "serial": {
                 "cli_port": None,

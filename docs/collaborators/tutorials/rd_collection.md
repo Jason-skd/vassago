@@ -80,7 +80,7 @@ uv run vassago collection rd init-session
 - 交互模式下，`operator_name` 必须手动输入，不会自动带默认值
 - `gesture`、`environment` 不是自由输入，而是从 profile 里选择
 - session 创建成功后，会生成一个 `manifest.json`
-- `manifest.json` 顶层会直接写入本次 session 的公共字段，例如 `gesture`、`batch_size`、`gesture_options`、`environment_options`、串口信息
+- `manifest.json` 顶层会直接写入本次 session 的公共字段，例如 `gesture`、`firmware_config_id`、`gesture_options`、`environment_options`、串口信息
 - `config_snapshot` 会同时保留本次生效 collection config 的完整镜像，供后续追溯和离线 QC 使用
 
 如果你已经知道所有参数，也可以用非交互模式：
@@ -218,6 +218,8 @@ uv run vassago collection rd list-sessions
 
 - `manifest.json` 顶层公共字段和 `config_snapshot` 在 `init-session` 阶段就已经生成
 - `Accept take` 这一步主要是在补写当前 take 的产物路径、窗口信息和接受状态
+- 如果你想确认这次 session 绑定的是哪份 profile，看 `config_snapshot.config_id`
+- 如果你想确认这次 session 实际使用了哪份 mmWave cfg，看顶层 `firmware_config_id`
 
 典型目录结构如下：
 

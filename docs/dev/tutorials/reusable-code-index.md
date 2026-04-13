@@ -121,7 +121,9 @@
 优先复用的函数与入口：
 
 - `validate_all_configs()`
-- `python -m vassago.configs.validation`
+- `run_config_discovery()`
+- `run_config_validation()`
+- `uv run vassago configs validate`
 
 它已经帮你串起：
 
@@ -341,7 +343,7 @@
 
 - metadata header 校验
 - profile 和 global 合并
-- `firmware.config_id` 绑定校验
+- `defaults.firmware_config_id` 绑定校验
 - serial defaults 合并
 - `gesture_target_durations` 约束
 - `config_snapshot` 生成
@@ -395,12 +397,14 @@
 
 - 需要执行 live capture
 - 需要把 raw UART 数据汇总成和 smoke-test 一致的摘要
+- 需要把 live packet 结果分发给 summary、QC、visualizer 一类 consumer
 - 需要在 collection 流程里重新配置雷达
 
 优先复用的函数与类型：
 
 - `run_session()`
 - `capture_take()`
+- `review_capture_take()`
 - `summarize_raw_capture()`
 - `read_available_bytes()`
 - `RunSessionSummary`
@@ -409,7 +413,26 @@
 最重要的复用点：
 
 - `capture.py` 明确复用了 `smoke_test.send_config()`、`smoke_test.validate_cli_session()` 和 `protocol` 解析能力
+- live capture 已经提供“raw bytes -> shared packet parser -> 多个 consumer”的接线位置
 - 如果你要扩展采集流程，优先沿着这条复用链走，不要把 `smoke-test` 逻辑再复制一遍
+
+### [src/vassago/collection/rd/visualizer.py](../../../src/vassago/collection/rd/visualizer.py)
+
+优先复用场景：
+
+- 需要在 live capture 里接入点云可视化
+- 需要把 parsed packet 转成 GUI 可消费的 `PointCloudFrame`
+- 需要一个可关闭、不会阻塞主采集循环的可视化 consumer
+
+优先复用的函数与类型：
+
+- `start_visualizer()`
+- `PointCloudVisualizerSession`
+
+最重要的原则：
+
+- visualizer 消费的是解析后的 packet/frame 结果，不是直接重写一套 UART/TLV parser
+- GUI 失败或队列拥塞时，不能反向拖垮核心采集路径
 
 ### [src/vassago/collection/rd/quick_qc.py](../../../src/vassago/collection/rd/quick_qc.py)
 

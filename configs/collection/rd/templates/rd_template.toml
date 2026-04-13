@@ -5,14 +5,11 @@
 # description = "Template for authoring RD collection round profiles."
 # lifecycle = "template"
 # ---
-schema_version = "collection_rd_profile_v2"
+schema_version = "collection_rd_profile_v3"
 batch_size = 12
 
 [global]
 config_id = "rd_global_default"
-
-[firmware]
-default_config_id = "rd_candidate"
 
 # Optional overrides for repository-level defaults.
 # capture_window_duration_s = 5.0
@@ -32,6 +29,7 @@ angle_deg = 0.0
 environment = "office_lab"
 radar_id = "rd_aop_01"
 firmware_id = "rd_phase1_uart"
+firmware_config_id = "rd_candidate"
 
 [options]
 gestures = ["swipe_left", "swipe_right", "push", "pull"]

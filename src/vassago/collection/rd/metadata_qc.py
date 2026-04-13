@@ -140,8 +140,8 @@ TOP_LEVEL_FIELD_SPECS: dict[str, FieldSpec] = {
     "note": FieldSpec("string or null", _is_optional_string),
     "radar_id": FieldSpec("non-empty string", _is_non_empty_string),
     "firmware_id": FieldSpec("non-empty string", _is_non_empty_string),
+    "firmware_config_id": FieldSpec("non-empty string", _is_non_empty_string),
     "gesture": FieldSpec("non-empty string", _is_non_empty_string),
-    "batch_size": FieldSpec("positive integer", _is_positive_int),
     "gesture_options": FieldSpec("non-empty string list", _is_non_empty_string_list),
     "environment_options": FieldSpec(
         "non-empty string list",
@@ -171,7 +171,6 @@ SNAPSHOT_FIELD_SPECS: dict[tuple[str, ...], FieldSpec] = {
     ("description",): FieldSpec("non-empty string", _is_non_empty_string),
     ("batch_size",): FieldSpec("positive integer", _is_positive_int),
     ("global", "config_id"): FieldSpec("non-empty string", _is_non_empty_string),
-    ("firmware", "config_id"): FieldSpec("non-empty string", _is_non_empty_string),
     ("runtime", "capture_window_duration_s"): FieldSpec(
         "positive number",
         _is_positive_number,
@@ -191,6 +190,10 @@ SNAPSHOT_FIELD_SPECS: dict[tuple[str, ...], FieldSpec] = {
     ("defaults", "environment"): FieldSpec("non-empty string", _is_non_empty_string),
     ("defaults", "radar_id"): FieldSpec("non-empty string", _is_non_empty_string),
     ("defaults", "firmware_id"): FieldSpec("non-empty string", _is_non_empty_string),
+    ("defaults", "firmware_config_id"): FieldSpec(
+        "non-empty string",
+        _is_non_empty_string,
+    ),
     ("serial", "cli_port"): FieldSpec("string or null", _is_optional_string),
     ("serial", "data_port"): FieldSpec("string or null", _is_optional_string),
     ("serial", "cli_baudrate"): FieldSpec("positive integer", _is_positive_int),
@@ -216,6 +219,7 @@ def run_metadata_qc(context: OfflineQcSessionContext) -> QcReport:
         *_check_top_level_contract(manifest),
         *_check_take_contract(manifest),
         *_check_snapshot_contract(manifest),
+        *_check_take_count_matches_snapshot(manifest),
         *_check_snapshot_alignment(manifest),
     ]
     return QcReport.from_findings(findings)
@@ -244,21 +248,6 @@ def _check_top_level_contract(manifest: JsonObject) -> list[QcFinding]:
                     field_path=field_name,
                 )
             )
-
-    takes_value = manifest.get("takes")
-    batch_size = manifest.get("batch_size")
-    if (
-        _is_list(takes_value)
-        and _is_positive_int(batch_size)
-        and len(takes_value) != batch_size
-    ):
-        findings.append(
-            _error(
-                CODE_TAKE_COUNT_MISMATCH,
-                "manifest takes length must match top-level batch_size.",
-                field_path="takes",
-            )
-        )
 
     return findings
 
@@ -370,6 +359,27 @@ def _check_snapshot_contract(manifest: JsonObject) -> list[QcFinding]:
             )
 
     return findings
+
+
+def _check_take_count_matches_snapshot(manifest: JsonObject) -> list[QcFinding]:
+    raw_takes = manifest.get("takes")
+    raw_snapshot = manifest.get("config_snapshot")
+    if not isinstance(raw_takes, list) or not isinstance(raw_snapshot, dict):
+        return []
+
+    snapshot_batch_size = _lookup_nested(raw_snapshot, ("batch_size",))
+    if not _is_positive_int(snapshot_batch_size):
+        return []
+    if len(raw_takes) == snapshot_batch_size:
+        return []
+
+    return [
+        _error(
+            CODE_TAKE_COUNT_MISMATCH,
+            "manifest takes length must match config_snapshot.batch_size.",
+            field_path="takes",
+        )
+    ]
 
 
 def _check_snapshot_alignment(manifest: JsonObject) -> list[QcFinding]:

@@ -33,8 +33,6 @@ def test_initialize_session_persists_manifest_with_config_snapshot(tmp_path) -> 
     loaded_manifest = collection_session.load_manifest(manifest_path)
     config_snapshot = loaded_manifest["config_snapshot"]
     assert isinstance(config_snapshot, dict)
-    firmware = config_snapshot["firmware"]
-    assert isinstance(firmware, dict)
     takes = loaded_manifest["takes"]
     assert isinstance(takes, list)
     first_take = takes[0]
@@ -43,12 +41,15 @@ def test_initialize_session_persists_manifest_with_config_snapshot(tmp_path) -> 
     assert manifest_path.exists()
     assert manifest["schema_version"] == collection_session.SESSION_SCHEMA_VERSION
     assert loaded_manifest["subject_name"] == "alice"
-    assert loaded_manifest["config_id"] == "rd_phase1_default"
-    assert loaded_manifest["batch_size"] == profile.batch_size
+    assert "config_id" not in loaded_manifest
+    assert loaded_manifest["firmware_config_id"] == "rd_candidate"
     assert loaded_manifest["gesture_options"] == list(profile.gestures)
     assert loaded_manifest["environment_options"] == list(profile.environments)
+    assert len(takes) == profile.batch_size
     assert config_snapshot["batch_size"] == profile.batch_size
-    assert firmware["config_id"] == "rd_candidate"
+    defaults = config_snapshot["defaults"]
+    assert isinstance(defaults, dict)
+    assert defaults["firmware_config_id"] == profile.default_firmware_config_id
     assert first_take["capture_window"] is None
     assert first_take["target_window"] is None
     assert first_take["marked_window"] is None

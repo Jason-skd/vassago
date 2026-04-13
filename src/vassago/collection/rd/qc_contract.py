@@ -37,8 +37,8 @@ MANIFEST_TOP_LEVEL_EXTRACT_FIELDS = (
     "note",
     "radar_id",
     "firmware_id",
+    "firmware_config_id",
     "gesture",
-    "batch_size",
     "gesture_options",
     "environment_options",
     "cli_port",
@@ -54,6 +54,7 @@ MANIFEST_TOP_LEVEL_SELECTION_FIELDS = (
     "environment",
     "radar_id",
     "firmware_id",
+    "firmware_config_id",
     "gesture",
 )
 
@@ -96,12 +97,12 @@ class SnapshotMembershipRule:
 
 MANIFEST_SNAPSHOT_COMPARISON_RULES = (
     SnapshotComparisonRule(
-        top_level_field="batch_size",
-        snapshot_path=("batch_size",),
-        mismatch_severity=QC_SEVERITY_ERROR,
+        top_level_field="firmware_config_id",
+        snapshot_path=("defaults", "firmware_config_id"),
+        mismatch_severity=QC_SEVERITY_WARN,
         rationale=(
-            "batch_size is part of the top-level public contract and must mirror "
-            "the config snapshot exactly."
+            "firmware_config_id is the runtime-selected mmWave cfg, while the "
+            "snapshot keeps the profile default baseline."
         ),
     ),
     SnapshotComparisonRule(
