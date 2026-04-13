@@ -175,28 +175,27 @@ packet(frame #128)
 
 它不是线上原始协议结构名，而是上层更适合消费的业务对象名。
 
-当前仓库里还没有正式定义这个类型，但在现有 visualizer 实现里，点云的实际数据形态已经接近它：
+当前仓库里已经正式定义了这个类型，位置在
+`src/vassago/firmware/mmwave/point_cloud.py`：
 
 ```python
-list[tuple[float, float, float, float]]
+PointCloudFrame(
+    frame_number=128,
+    sub_frame_number=0,
+    time_cpu_cycles=123456,
+    points=(
+        PointCloudPoint(x=..., y=..., z=..., velocity=...),
+        ...
+    ),
+)
 ```
 
-每个点表示：
+其中每个点表示：
 
 - `x`
 - `y`
 - `z`
 - `v`（velocity / Doppler）
-
-如果后续把它收敛成正式类型，更合理的形态通常会接近：
-
-```python
-PointCloudFrame(
-    frame_number=128,
-    relative_time_s=1.73,
-    points=[(x, y, z, velocity), ...],
-)
-```
 
 这里要特别注意：
 

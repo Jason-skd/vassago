@@ -140,6 +140,13 @@ def handle_init_session(  # noqa: PLR0913
             help="Allow interactive config and field selection when args are missing.",
         ),
     ] = True,
+    visualizer: Annotated[
+        bool,
+        typer.Option(
+            "--visualizer/--no-visualizer",
+            help="Enable the experimental live point-cloud visualizer during run.",
+        ),
+    ] = False,
 ) -> None:
     """Create a collection session manifest from the configured contract."""
     resolved_interactive = interactive and sys.stdin.isatty()
@@ -237,7 +244,10 @@ def handle_init_session(  # noqa: PLR0913
     )
 
     if run_after_init:
-        summary = collection_capture.run_session(manifest_path)
+        summary = collection_capture.run_session(
+            manifest_path,
+            enable_visualizer=visualizer,
+        )
         console.print(
             f"accepted_take_count: {summary.accepted_take_count}\n"
             f"remaining_take_count: {summary.remaining_take_count}",
@@ -267,6 +277,13 @@ def handle_run_session(
             ),
         ),
     ] = True,
+    visualizer: Annotated[
+        bool,
+        typer.Option(
+            "--visualizer/--no-visualizer",
+            help="Enable the experimental live point-cloud visualizer during run.",
+        ),
+    ] = False,
 ) -> None:
     """Run or resume one collection session."""
     resolved_interactive = interactive and sys.stdin.isatty()
@@ -287,6 +304,7 @@ def handle_run_session(
     summary = collection_capture.run_session(
         selected_manifest,
         read_size=read_size,
+        enable_visualizer=visualizer,
     )
     manifest_data = collection_session.load_manifest(selected_manifest)
     collection_ui.render_session_summary(
