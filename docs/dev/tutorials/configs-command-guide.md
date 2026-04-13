@@ -1,168 +1,247 @@
-# `configs` 相关命令使用指南
+# `configs` 命令使用指南
 
-这篇文档是写给“要发现配置文件、确认 `config_id`、验证配置树、或让业务命令消费某份配置”的人看的。
+这篇文档是写给“要发现配置、跑全量检测、单独执行某个子检查，或确认业务命令真的能消费某份 config”的人看的。
 
-它不讲实现细节，重点只放在“现在该跑什么命令”。
+本文以当前 `vassago configs` 命令树为准。
 
-## 1. 先建立一个正确心智模型
+## 1. 先建立正确心智模型
 
-和 `configs/` 打交道时，命令大致分成 3 类：
+当前 `configs` 系统分成 4 层：
 
-1. 找文件
-2. 验配置
-3. 用配置
+- catalog discovery
+  负责发现 `configs/` 下哪些文件属于 repo-managed config，并解析 metadata header。
+- validation orchestrator
+  负责把 discovery 和多个 peer checks 串起来，形成一次全量校验。
+- peer checks
+  每个子检查都可以被独立调用，目前至少包括：
+  - entry location
+  - config semantics
+  - mmWave cfg integrity
+- business consumers
+  例如 `collection rd init-session`、`collection rd list-configs`、`firmware mmwave smoke-test`。
 
-大多数排查都应该按这个顺序走，而不是一上来就猜代码。
+一句话记忆：
 
-## 2. 找文件：先确认仓库里到底有什么
+- `vassago configs list`
+  看 catalog 里现在到底有什么
+- `vassago configs validate`
+  跑全量检测
+- `vassago configs validate-*`
+  只跑某个重要子检查
+- `collection` / `firmware` 命令
+  验证业务入口是否真的能消费这些 config
 
-### 看整个 `configs/` 树里有哪些受关注文件
+## 2. 先看 catalog：仓库现在发现到了什么
+
+### 列出全部受管 config
 
 ```bash
-rg --files configs
+uv run vassago configs list
 ```
 
 适合场景：
 
 - 你刚接手仓库
-- 你只记得文件大概在 `configs/` 下，但忘了具体位置
-- 你想确认某个文件到底在不在 repo 里
+- 你想确认某份配置有没有进入 catalog
+- 你怀疑某个文件在仓库里，但 discovery 没把它认出来
 
-### 只看 mmWave cfg
+### 只看某一类 config
+
+例如只看 mmWave cfg：
 
 ```bash
-rg --files configs/firmware/mmwave
+uv run vassago configs list --kind mmwave_cfg
 ```
 
-适合场景：
-
-- 想找可用的 `.cfg`
-- 想确认新加的 cfg 是否已经落在正确目录
-
-### 只看 RD collection 相关 TOML
+例如只看 active 的 RD collection profile：
 
 ```bash
-rg --files configs/collection/rd
+uv run vassago configs list \
+  --kind collection_rd_profile \
+  --lifecycle active
 ```
 
-适合场景：
+这类命令适合回答：
 
-- 想确认 `global.toml`、`profiles/`、`templates/` 现在有哪些文件
+- 某个 `config_id` 是否真的在 catalog 里
+- 某个 profile 是否被错误标成 template
+- 现在有哪些 active / template 配置
 
-## 3. 找身份：快速确认 `config_id`
+## 3. 跑全量检测：默认入口就是 `configs validate`
 
-很多时候你真正要找的不是文件名，而是 `config_id`。
-
-### 在 `configs/` 里搜索 `config_id`
-
-```bash
-rg -n "config_id = " configs
-```
-
-适合场景：
-
-- 你知道配置用途，但忘了它的 `config_id`
-- 你想确认有没有重复或相似命名
-
-### 看某个文件头部 metadata
-
-例如：
+### 全仓配置检测
 
 ```bash
-sed -n '1,20p' configs/firmware/mmwave/baseline_pointcloud.cfg
-```
-
-或：
-
-```bash
-sed -n '1,20p' configs/collection/rd/profiles/rd_phase1_default.toml
-```
-
-重点看：
-
-- `config_kind`
-- `config_id`
-- `label`
-- `description`
-- `lifecycle`
-
-## 4. 看发现规则：为什么某个文件会或不会被 catalog 发现
-
-如果你怀疑“文件明明在仓库里，但命令就是没认出来”，先看 discovery rule。
-
-```bash
-sed -n '1,200p' configs/registry/catalog_roots.toml
-```
-
-这份文件决定：
-
-- 哪些 glob 会被纳入 catalog
-- 每个 glob 对应什么 `kind`
-
-典型场景：
-
-- 新文件放错目录了
-- 新增了模板，但没落在被发现的 glob 下
-- 你以为某个目录会被 catalog 扫到，其实没有
-
-## 5. 验配置：改完后先跑全量校验
-
-### 全仓配置校验
-
-```bash
-uv run python -m vassago.configs.validation
+uv run vassago configs validate
 ```
 
 这是修改 `configs/` 之后最重要的一条命令。
 
-它会统一检查：
+它会按统一编排依次做这些事：
 
-- metadata header 能不能解析
-- `config_id` 有没有重复
-- lifecycle 和目录角色是否冲突
-- mmWave cfg 命令是否合法
-- RD collection global/profile 能不能正常加载
+1. 跑 discovery
+2. 构建 catalog
+3. 运行 entry location 检查
+4. 运行语义检查
+5. 运行 mmWave cfg integrity 检查
+
+当前它覆盖的核心问题包括：
+
+- metadata header 无法解析
+- `config_kind` 与 discovery root 不一致
+- `config_id` 重复
+- lifecycle 与目录角色冲突
+- header-only key 被写进 TOML body
+- mmWave cfg 命令名、参数个数、顺序或派生约束错误
+- collection global / profile 无法加载
+- mmWave cfg integrity registry 与当前 catalog 不一致
 
 什么时候必须跑：
 
 - 新增或修改任何 `configs/` 文件之后
-- 修改 `catalog_roots.toml` 之后
-- 修改 `mmwave_cfg_commands.toml` 之后
+- 修改 `configs/registry/catalog_roots.toml` 之后
+- 修改 `configs/registry/mmwave_cfg_commands.toml` 之后
+- 修改 config loader / validator / catalog builder 之后
 
-### 跑配置相关测试
+### 全量检测和严格 integrity 检查的区别
+
+默认：
 
 ```bash
-uv run pytest tests/test_configs.py
+uv run vassago configs validate
 ```
+
+会先为“registry 里还没有记录的新 mmWave cfg”追加 hash，再继续全量检测。
+
+如果你想要一个不自动补记录、只做严格校验的入口，用：
+
+```bash
+uv run vassago configs validate-mmwave-cfg-integrity
+```
+
+如果你确认就是要把新 cfg 纳入 registry，再显式运行：
+
+```bash
+uv run vassago configs record-missing-mmwave-cfg-integrity
+```
+
+## 4. 单独跑子检查：不要总是把所有问题混在一起
+
+### 只检查 discovery / metadata
+
+```bash
+uv run vassago configs validate-discovery
+```
+
+这条命令只关注：
+
+- `catalog_roots.toml` 能不能加载
+- discovery root 是否可用
+- metadata header 能不能解析
+- `config_kind` 是否和 root 对得上
+- `config_id` 是否重复
 
 适合场景：
 
-- 你改了 config validator 或 config loader
-- 你想多拿一层回归保障
+- 新文件刚落到 `configs/`，但你还没开始排正文
+- 命令里说找不到 `config_id`
+- 你怀疑文件路径或 metadata header 写错了
 
-如果你改动涉及 collection profile，也建议补跑：
+### 只检查 lifecycle / 目录角色
 
 ```bash
-uv run pytest tests/test_collection_config.py tests/test_collection_session.py
+uv run vassago configs validate-entry-location
 ```
 
-## 6. 用配置：确认业务命令真的能消费它
+这条命令只关注：
 
-校验通过不代表业务入口一定按你预期消费了它，所以改完后最好再跑一条“真实消费命令”。
+- active config 是否误放在 `templates/`
+- template config 是否误放在 active 目录
 
-### 查看当前可选 collection profiles
+适合场景：
+
+- `list` 能看见文件，但业务入口没把它当 active 配置
+- profile / template 目录边界刚改过
+
+### 只检查 config semantics
+
+```bash
+uv run vassago configs validate-semantics
+```
+
+这条命令只关注 catalog 已经发现成功之后的正文语义：
+
+- TOML body 里是否误写 header-only key
+- mmWave cfg 是否满足命令表与派生约束
+- RD collection global / profile 是否能被 loader 正常消费
+
+适合场景：
+
+- 你已经确认文件能被发现
+- 现在要排“正文结构不合法”而不是 discovery 问题
+
+### 只检查 mmWave cfg integrity
+
+```bash
+uv run vassago configs validate-mmwave-cfg-integrity
+```
+
+这条命令只关注：
+
+- integrity registry 是否缺项
+- registry 是否声明了未知 `config_id`
+- 当前 cfg 内容 hash 是否与 registry 一致
+
+适合场景：
+
+- 你在处理 mmWave cfg 变更
+- 你想确认某次改动是不是触发了受管 cfg 漂移
+- 你不想在检查前自动补 registry
+
+## 5. 修 registry：只在你明确知道自己在做什么时运行
+
+### 为新 mmWave cfg 补 hash
+
+```bash
+uv run vassago configs record-missing-mmwave-cfg-integrity
+```
+
+它只会：
+
+- 发现 catalog 里的 mmWave cfg
+- 找出 integrity registry 里还没有记录的 `config_id`
+- 只追加这些缺失项
+
+它不会：
+
+- 刷新已有 hash
+- 覆盖旧记录
+- 帮你“接受”已存在 cfg 的内容变化
+
+如果某个已有 cfg 内容真的变了，优先判断：
+
+- 这是不是不该直接修改的受管 cfg
+- 是否应该新建一个新的 `config_id`
+
+## 6. 改完后还要跑业务入口验收
+
+`configs validate` 通过，不代表业务命令就一定按你预期消费了配置。
+
+至少再补一条真实消费命令。
+
+### 验证 collection profile 是否被识别
 
 ```bash
 uv run vassago collection rd list-configs
 ```
 
-这条命令适合验证：
+适合检查：
 
-- `configs/collection/rd/profiles/*.toml` 是否真的被业务入口识别
-- `label`、`description` 是否对人可读
-- 你的 profile 有没有被错误写成 template 或无效配置
+- `profiles/*.toml` 是否真的进入 active selection
+- `label` / `description` 是否对人可读
+- profile 是否误写成 template
 
-### 用某个 `config_id` 初始化 collection session
+### 验证 collection profile 是否能初始化 session
 
 ```bash
 uv run vassago collection rd init-session \
@@ -178,13 +257,13 @@ uv run vassago collection rd init-session \
   --no-interactive
 ```
 
-这条命令适合验证：
+适合检查：
 
 - profile 的 `config_id` 能不能被解析
 - `global` 和 `firmware` 绑定是否有效
-- `defaults` / `options` / `gesture_target_durations` 是否能被正常消费
+- runtime / defaults / options 是否能被业务流程正常消费
 
-### 用某个 mmWave `config_id` 做 smoke-test
+### 验证某个 mmWave cfg 是否能进入真实消费链路
 
 ```bash
 uv run vassago firmware mmwave smoke-test \
@@ -194,10 +273,10 @@ uv run vassago firmware mmwave smoke-test \
   --no-interactive
 ```
 
-这条命令适合验证：
+适合检查：
 
-- mmWave cfg 是否真的能被 `config_id` 解析到
-- cfg 文件本身是否至少能进入真实消费链路
+- mmWave cfg 是否真的能通过 `config_id` 解析
+- cfg 文件是否至少能走到业务链路里
 
 ## 7. 常见排查顺序
 
@@ -205,70 +284,81 @@ uv run vassago firmware mmwave smoke-test \
 
 按这个顺序看：
 
-1. `rg -n "config_id = " configs`
-2. `sed -n '1,20p' <目标文件>`
-3. `sed -n '1,200p' configs/registry/catalog_roots.toml`
-4. `uv run python -m vassago.configs.validation`
+1. `uv run vassago configs list`
+2. `uv run vassago configs validate-discovery`
+3. `uv run vassago configs validate`
 
 最常见原因通常是：
 
 - 文件放错目录
 - metadata header 写错
-- `config_id` 不在被发现的目录树下
+- `config_id` 不在被 discovery 的目录树下
 
-### 场景 2：文件在，但 `list-configs` 看不到
+### 场景 2：文件在，但业务入口看不到它
 
 优先检查：
 
-- 文件是不是放在 `profiles/` 而不是 `templates/`
-- `lifecycle` 是否写成了 `template`
-- 文件是否能通过 `uv run python -m vassago.configs.validation`
+1. `uv run vassago configs list --kind collection_rd_profile`
+2. `uv run vassago configs validate-entry-location`
+3. `uv run vassago collection rd list-configs`
 
-### 场景 3：校验器报 mmWave cfg 错误
+最常见原因通常是：
 
-优先看：
+- 文件在 `templates/` 而不是 active 目录
+- `lifecycle = "template"`
+- 语义检查没过，业务 loader 没法消费
 
-```bash
-sed -n '1,240p' configs/registry/mmwave_cfg_commands.toml
-```
+### 场景 3：全量检测里主要是 mmWave cfg 报错
 
-通常是：
+优先拆开跑：
 
-- 命令名不在 registry 里
-- 参数个数不对
-- `sensorStart` 不是最后一条
-- 某些派生约束不满足
+1. `uv run vassago configs validate-semantics`
+2. `uv run vassago configs validate-mmwave-cfg-integrity`
+3. `uv run vassago configs record-missing-mmwave-cfg-integrity`
 
-### 场景 4：你只是想快速确认改动没把配置树搞坏
+经验上：
+
+- 语义报错先修 cfg 正文
+- integrity 缺项再补 registry
+- 已有 cfg hash mismatch 不要直接“补记录覆盖过去”
+
+### 场景 4：你只是想确认这次改动没把配置树搞坏
 
 最省心的最小命令集合是：
 
 ```bash
-uv run python -m vassago.configs.validation
+uv run vassago configs validate
 uv run vassago collection rd list-configs
 uv run pytest tests/test_configs.py
 ```
 
-## 8. 什么时候该用 shell 命令，什么时候该用业务命令
+## 8. 什么时候还该用 shell 命令
 
-最简单的判断标准：
+`vassago configs` 已经覆盖 discovery、全量检测和重要子检查。
 
-- 只是找文件、看 metadata、看 registry
-  用 `rg`、`sed`
-- 想验证仓库配置系统整体是否 still valid
-  用 `uv run python -m vassago.configs.validation`
-- 想确认业务流程是否真的能消费某份配置
-  用 `vassago collection rd ...` 或 `vassago firmware mmwave ...`
+但下面这些动作，shell 仍然合适：
 
-不要把这三类命令混成一类。
+- 想看某个文件头部 comment metadata
+  用 `sed -n '1,20p' <path>`
+- 想看 registry 原文
+  用 `sed -n '1,240p' configs/registry/*.toml`
+- 想在大范围内搜某个字段
+  用 `rg`
+
+判断标准很简单：
+
+- 想执行 repo 约定好的检查流程
+  先用 `vassago configs ...`
+- 想人工阅读原文或做低层排查
+  再用 `rg` / `sed`
 
 ## 9. 一句话总结
 
-和 `configs/` 打交道时，最稳妥的顺序永远是：
+和 `configs/` 打交道时，默认顺序是：
 
-1. 先找文件
-2. 再看 `config_id`
-3. 再跑全量校验
-4. 最后跑真实消费命令
+1. `uv run vassago configs list`
+2. `uv run vassago configs validate`
+3. 需要时再拆成 `validate-discovery` / `validate-semantics` / `validate-mmwave-cfg-integrity`
+4. 最后补一条真实业务消费命令验收
 
-这样排查，通常比一上来猜 loader 或猜 CLI 快得多。
+这样排查，通常比直接猜 loader、猜 CLI、猜 registry 快得多。

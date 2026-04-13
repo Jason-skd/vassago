@@ -1,4 +1,4 @@
-"""Whole-repository managed config validation entrypoint."""
+"""Whole-repository managed config validation orchestration."""
 
 from __future__ import annotations
 
@@ -20,47 +20,79 @@ from vassago.configs.models import ValidationLevel
 from vassago.configs.paths import CATALOG_ROOTS_PATH
 from vassago.configs.paths import resolve_repo_path
 from vassago.configs.paths import to_repo_relative_path
+from vassago.configs.validation_contract import CONFIG_VALIDATION_PLUGIN_DISCOVERY
 from vassago.configs.validation_contract import ConfigValidationCheck
 from vassago.configs.validation_contract import ValidationContext
 from vassago.configs.validation_contract import ValidationMessage
+from vassago.configs.validation_contract import ValidationReport
+from vassago.configs.validation_contract import ValidationRunResult
+from vassago.configs.validation_contract import merge_reports
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
     from collections.abc import Sequence
     from pathlib import Path
+
+
+def run_config_validation(
+    *,
+    checks: Sequence[ConfigValidationCheck] | None = None,
+    record_missing_mmwave_cfg_integrity: bool = True,
+) -> ValidationReport:
+    """Run discovery and the selected peer checks across the config tree."""
+    discovery_result = run_config_discovery()
+    if discovery_result.report.has_errors:
+        return discovery_result.report
+
+    if record_missing_mmwave_cfg_integrity:
+        _append_missing_mmwave_cfg_integrity_records(discovery_result.catalog)
+
+    validation_report = run_config_validation_context(
+        context=ValidationContext(catalog=discovery_result.catalog),
+        checks=checks,
+    )
+    return merge_reports((discovery_result.report, validation_report))
+
+
+def run_config_validation_context(
+    *,
+    context: ValidationContext,
+    checks: Sequence[ConfigValidationCheck] | None = None,
+) -> ValidationReport:
+    """Run the selected peer checks for one already-built validation context."""
+    return _run_validation_checks(
+        context,
+        checks=checks or DEFAULT_CONFIG_VALIDATION_CHECKS,
+    )
 
 
 def validate_all_configs(
     *,
     checks: Sequence[ConfigValidationCheck] | None = None,
 ) -> list[ValidationMessage]:
-    """Run metadata and kind-specific validation across the config tree."""
+    """Return the flat config validation messages for compatibility callers."""
+    return list(run_config_validation(checks=checks).messages)
+
+
+def run_config_discovery() -> ValidationRunResult:
+    """Discover managed configs and validate metadata before peer checks run."""
     clear_catalog_cache()
     clear_mmwave_cfg_integrity_cache()
-    metadata_messages, catalog = _run_metadata_stage()
-    _append_missing_mmwave_cfg_integrity_records(catalog)
-    validation_context = ValidationContext(catalog=catalog)
-    semantic_messages = _run_validation_checks(
-        validation_context,
-        checks=checks or DEFAULT_CONFIG_VALIDATION_CHECKS,
-    )
-    return [*metadata_messages, *semantic_messages]
 
-
-def _run_metadata_stage() -> tuple[list[ValidationMessage], ConfigCatalog]:
-    """Discover managed configs and validate metadata headers first."""
     try:
         root_specs = load_root_specs()
     except Exception as exc:  # noqa: BLE001
-        return (
-            [
-                ValidationMessage(
-                    level=ValidationLevel.ERROR,
-                    path=resolve_repo_path(CATALOG_ROOTS_PATH),
-                    message=str(exc),
-                )
-            ],
-            ConfigCatalog(entries=()),
+        return ValidationRunResult(
+            catalog=ConfigCatalog(entries=()),
+            report=ValidationReport.from_messages(
+                [
+                    ValidationMessage(
+                        level=ValidationLevel.ERROR,
+                        path=resolve_repo_path(CATALOG_ROOTS_PATH),
+                        message=str(exc),
+                        plugin=CONFIG_VALIDATION_PLUGIN_DISCOVERY,
+                    )
+                ]
+            ),
         )
 
     messages: list[ValidationMessage] = []
@@ -92,6 +124,7 @@ def _run_metadata_stage() -> tuple[list[ValidationMessage], ConfigCatalog]:
                         f"Duplicate config_id {config_id!r} detected across "
                         f"{joined_paths}."
                     ),
+                    plugin=CONFIG_VALIDATION_PLUGIN_DISCOVERY,
                 )
                 for entry in entries
             ]
@@ -100,7 +133,10 @@ def _run_metadata_stage() -> tuple[list[ValidationMessage], ConfigCatalog]:
     valid_entries = [
         entry for entry in parsed_entries if entry.config_id not in duplicate_entries
     ]
-    return messages, ConfigCatalog(entries=tuple(valid_entries))
+    return ValidationRunResult(
+        catalog=ConfigCatalog(entries=tuple(valid_entries)),
+        report=ValidationReport.from_messages(messages),
+    )
 
 
 def _parse_entry_metadata(
@@ -118,6 +154,7 @@ def _parse_entry_metadata(
                 level=ValidationLevel.ERROR,
                 path=path,
                 message=str(exc),
+                plugin=CONFIG_VALIDATION_PLUGIN_DISCOVERY,
             )
         ]
 
@@ -130,6 +167,7 @@ def _parse_entry_metadata(
                     f"Config kind mismatch: header={metadata.kind.value}, "
                     f"root={expected_kind.value}."
                 ),
+                plugin=CONFIG_VALIDATION_PLUGIN_DISCOVERY,
             )
         ]
 
@@ -155,12 +193,10 @@ def _run_validation_checks(
     context: ValidationContext,
     *,
     checks: Sequence[ConfigValidationCheck],
-) -> list[ValidationMessage]:
+) -> ValidationReport:
     """Run the selected peer checks against the discovered config catalog."""
-    messages: list[ValidationMessage] = []
-    for check in checks:
-        messages.extend(check(context))
-    return messages
+    reports = tuple(check(context) for check in checks)
+    return merge_reports(reports)
 
 
 def _append_missing_mmwave_cfg_integrity_records(catalog: ConfigCatalog) -> None:
@@ -174,27 +210,30 @@ def _append_missing_mmwave_cfg_integrity_records(catalog: ConfigCatalog) -> None
         return
 
 
-def _print_messages(messages: Iterable[ValidationMessage]) -> int:
-    """Render validation messages and return the error count."""
-    error_count = 0
-    for message in messages:
+def _print_report(report: ValidationReport) -> int:
+    """Render a flat validation report and return the error count."""
+    error_count = len(report.messages_for(level=ValidationLevel.ERROR))
+    warn_count = len(report.messages_for(level=ValidationLevel.WARN))
+    result = "fail" if error_count else "pass_with_warnings" if warn_count else "pass"
+
+    print("Config Validation Summary")
+    print(f"result: {result}")
+    print(f"errors: {error_count}")
+    print(f"warnings: {warn_count}")
+    for message in report.messages:
+        plugin_text = f"{message.plugin} " if message.plugin else ""
         print(
-            f"{message.level} {to_repo_relative_path(message.path)}: {message.message}"
+            f"[{message.level}] {plugin_text}"
+            f"{to_repo_relative_path(message.path)}: {message.message}"
         )
-        if message.level == ValidationLevel.ERROR:
-            error_count += 1
     return error_count
 
 
 def main() -> int:
     """Run the repository config validator as a module entrypoint."""
-    messages = validate_all_configs()
-    error_count = _print_messages(messages)
-    if error_count:
-        print(f"Config validation failed with {error_count} error(s).")
-        return 1
-    print("Config validation passed.")
-    return 0
+    report = run_config_validation()
+    error_count = _print_report(report)
+    return 1 if error_count else 0
 
 
 if __name__ == "__main__":

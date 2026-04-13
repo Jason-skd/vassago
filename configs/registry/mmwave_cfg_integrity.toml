@@ -7,3 +7,7 @@ sha256 = "bbc1089015155234fdf68d22741439fc82073432eca16ac41682ce92f7be1f76"
 [[cfg]]
 config_id = "rd_candidate"
 sha256 = "0b16b99f383ffaee654ca08007250de8f01584dee12fa0269fc71f8c9781621c"
+
+[[cfg]]
+config_id = "rd_pointcloud_dual"
+sha256 = "5607a6f8611610a9a815beab3da626d6c521feb4ac898585f65cce4692db6b99"

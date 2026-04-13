@@ -11,8 +11,14 @@ from vassago.configs.models import ConfigKind
 from vassago.configs.models import ConfigLifecycle
 from vassago.configs.models import ValidationIssue
 from vassago.configs.models import ValidationLevel
+from vassago.configs.validation_contract import CONFIG_VALIDATION_PLUGIN_ENTRY_LOCATION
+from vassago.configs.validation_contract import (
+    CONFIG_VALIDATION_PLUGIN_MMWAVE_INTEGRITY,
+)
+from vassago.configs.validation_contract import CONFIG_VALIDATION_PLUGIN_SEMANTICS
 from vassago.configs.validation_contract import ValidationContext
 from vassago.configs.validation_contract import ValidationMessage
+from vassago.configs.validation_contract import ValidationReport
 from vassago.firmware.mmwave import config_validation as mmwave_config_validation
 
 if TYPE_CHECKING:
@@ -21,7 +27,7 @@ if TYPE_CHECKING:
     from vassago.configs.models import CatalogEntry
 
 
-def run_entry_location_check(context: ValidationContext) -> list[ValidationMessage]:
+def run_entry_location_check(context: ValidationContext) -> ValidationReport:
     """Warn when lifecycle and directory role disagree."""
     messages: list[ValidationMessage] = []
     for entry in context.catalog.entries:
@@ -38,6 +44,7 @@ def run_entry_location_check(context: ValidationContext) -> list[ValidationMessa
                         "Template lifecycle config should live under a templates "
                         "directory."
                     ),
+                    plugin=CONFIG_VALIDATION_PLUGIN_ENTRY_LOCATION,
                 )
             )
         if entry.lifecycle == ConfigLifecycle.ACTIVE and "/templates/" in path_text:
@@ -49,25 +56,31 @@ def run_entry_location_check(context: ValidationContext) -> list[ValidationMessa
                         "Active lifecycle config should not live under a templates "
                         "directory."
                     ),
+                    plugin=CONFIG_VALIDATION_PLUGIN_ENTRY_LOCATION,
                 )
             )
-    return messages
+    return ValidationReport.from_messages(messages)
 
 
 def run_mmwave_cfg_integrity_check(
     context: ValidationContext,
-) -> list[ValidationMessage]:
+) -> ValidationReport:
     """Validate that managed mmWave cfg files still match the integrity registry."""
     mmwave_entries = context.catalog.list_entries(kind=ConfigKind.MMWAVE_CFG)
-    return validate_mmwave_cfg_integrity(mmwave_entries)
+    return ValidationReport.from_messages(
+        _with_plugin(
+            validate_mmwave_cfg_integrity(mmwave_entries),
+            plugin=CONFIG_VALIDATION_PLUGIN_MMWAVE_INTEGRITY,
+        )
+    )
 
 
-def run_config_semantics_check(context: ValidationContext) -> list[ValidationMessage]:
+def run_config_semantics_check(context: ValidationContext) -> ValidationReport:
     """Run per-entry semantic checks after discovery has built the catalog."""
     messages: list[ValidationMessage] = []
     for entry in context.catalog.entries:
         messages.extend(_validate_entry_semantics(entry, context=context))
-    return messages
+    return ValidationReport.from_messages(messages)
 
 
 def _validate_entry_semantics(
@@ -104,6 +117,7 @@ def _validate_entry_semantics(
                 level=ValidationLevel.ERROR,
                 path=entry.path,
                 message=str(exc),
+                plugin=CONFIG_VALIDATION_PLUGIN_SEMANTICS,
             )
         )
 
@@ -125,6 +139,7 @@ def _validate_header_only_metadata_usage(
                 level=ValidationLevel.ERROR,
                 path=entry.path,
                 message=str(exc),
+                plugin=CONFIG_VALIDATION_PLUGIN_SEMANTICS,
             )
         ]
 
@@ -140,6 +155,7 @@ def _validate_header_only_metadata_usage(
                 "Header-only metadata keys must not appear in the TOML body: "
                 f"{invalid_keys!r}"
             ),
+            plugin=CONFIG_VALIDATION_PLUGIN_SEMANTICS,
         )
     ]
 
@@ -147,8 +163,30 @@ def _validate_header_only_metadata_usage(
 def _wrap_issues(path: Path, issues: list[ValidationIssue]) -> list[ValidationMessage]:
     """Attach the source path to kind-specific validation issues."""
     return [
-        ValidationMessage(level=issue.level, path=path, message=issue.message)
+        ValidationMessage(
+            level=issue.level,
+            path=path,
+            message=issue.message,
+            plugin=CONFIG_VALIDATION_PLUGIN_SEMANTICS,
+        )
         for issue in issues
+    ]
+
+
+def _with_plugin(
+    messages: list[ValidationMessage],
+    *,
+    plugin: str,
+) -> list[ValidationMessage]:
+    """Attach one stable plugin id to a flat message list."""
+    return [
+        ValidationMessage(
+            level=message.level,
+            path=message.path,
+            message=message.message,
+            plugin=message.plugin or plugin,
+        )
+        for message in messages
     ]
 
 

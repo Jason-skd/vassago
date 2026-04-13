@@ -15,9 +15,13 @@ from vassago.configs.mmwave_cfg_integrity import validate_mmwave_cfg_integrity
 from vassago.configs.models import CatalogEntry
 from vassago.configs.models import ConfigKind
 from vassago.configs.models import ValidationLevel
+from vassago.configs.paths import MMWAVE_CFG_INTEGRITY_PATH
+from vassago.configs.paths import resolve_repo_path
+from vassago.configs.validation import run_config_discovery
 from vassago.configs.validation import validate_all_configs
 from vassago.configs.validation_contract import ValidationContext
 from vassago.configs.validation_contract import ValidationMessage
+from vassago.configs.validation_contract import ValidationReport
 from vassago.firmware.mmwave.config_validation import validate_cfg
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -56,12 +60,67 @@ def test_catalog_discovers_repo_managed_configs() -> None:
     )
 
 
-def test_validate_all_configs_has_no_errors_for_repo_baseline() -> None:
+def test_validate_all_configs_has_no_errors_for_repo_baseline(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _use_temp_integrity_registry(tmp_path, monkeypatch)
     messages = validate_all_configs()
 
     assert not [
         message for message in messages if message.level == ValidationLevel.ERROR
     ]
+
+
+def test_run_config_discovery_builds_catalog_without_errors() -> None:
+    result = run_config_discovery()
+
+    assert result.report.has_errors is False
+    assert (
+        result.catalog.require_entry(
+            kind=ConfigKind.MMWAVE_CFG,
+            config_id="rd_candidate",
+        ).path.name
+        == "rd_candidate.cfg"
+    )
+
+
+def test_configs_list_command_renders_known_entries() -> None:
+    result = runner.invoke(app, ["configs", "list", "--kind", "mmwave_cfg"])
+
+    assert result.exit_code == 0
+    assert "Managed Config Catalog" in result.output
+    assert "rd_candidate" in result.output
+
+
+def test_configs_validate_command_succeeds_for_repo_baseline(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _use_temp_integrity_registry(tmp_path, monkeypatch)
+    result = runner.invoke(app, ["configs", "validate"])
+
+    assert result.exit_code == 0
+    assert "Config Validation Summary" in result.output
+    assert "result: pass" in result.output
+
+
+def test_configs_validate_discovery_command_succeeds_for_repo_baseline() -> None:
+    result = runner.invoke(app, ["configs", "validate-discovery"])
+
+    assert result.exit_code == 0
+    assert "Config Discovery Summary" in result.output
+    assert "result: pass" in result.output
+
+
+def test_configs_validate_mmwave_cfg_integrity_command_succeeds_for_repo_baseline() -> (
+    None
+):
+    result = runner.invoke(app, ["configs", "validate-mmwave-cfg-integrity"])
+
+    assert result.exit_code == 0
+    assert "mmWave cfg Integrity Summary" in result.output
+    assert "result: pass" in result.output
 
 
 def test_record_missing_mmwave_cfg_integrity_command_appends_new_cfg_only(
@@ -142,15 +201,19 @@ def test_validate_all_configs_appends_missing_mmwave_cfg_hash(
     )
 
 
-def test_validate_all_configs_accepts_custom_checks() -> None:
+def test_validate_all_configs_accepts_custom_checks(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _use_temp_integrity_registry(tmp_path, monkeypatch)
     expected_message = ValidationMessage(
         level=ValidationLevel.WARN,
         path=BASELINE_CFG_PATH,
         message="custom check ran",
     )
 
-    def custom_check(context: ValidationContext) -> list[ValidationMessage]:
-        return [expected_message]
+    def custom_check(context: ValidationContext) -> ValidationReport:
+        return ValidationReport.from_messages([expected_message])
 
     messages = validate_all_configs(checks=(custom_check,))
 
@@ -228,6 +291,20 @@ def _write_integrity_registry(path: Path, *, config_id: str, sha256: str) -> Pat
         path,
         entries=((config_id, sha256),),
     )
+
+
+def _use_temp_integrity_registry(tmp_path: Path, monkeypatch) -> Path:
+    registry_path = tmp_path / "mmwave_cfg_integrity.toml"
+    registry_path.write_text(
+        resolve_repo_path(MMWAVE_CFG_INTEGRITY_PATH).read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "vassago.configs.mmwave_cfg_integrity.MMWAVE_CFG_INTEGRITY_PATH",
+        registry_path,
+    )
+    clear_mmwave_cfg_integrity_cache()
+    return registry_path
 
 
 def _write_integrity_registry_entries(

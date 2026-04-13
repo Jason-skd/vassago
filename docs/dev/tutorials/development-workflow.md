@@ -165,7 +165,7 @@ AI 当被要求制定实施计划时, 需要主动分析是否有可以用上现
 
 处理 `configs/` 相关改动时，默认先跑：
 
-- `uv run python -m vassago.configs.validation`
+- `uv run vassago configs validate`
 
 如果这一步失败，不要先猜业务逻辑，先把 config contract 修正到通过。
 

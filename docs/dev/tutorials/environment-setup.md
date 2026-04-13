@@ -200,7 +200,7 @@ lefthook install
 - `uv run pyright`
 - `uv run pytest --testmon || [ $? -eq 5 ]`
 - 对暂存区中的 `data/collection/rd/sessions/*/manifest.json` 逐个执行 `uv run vassago collection rd offline-qc --manifest <manifest>`
-- `uv run python -m vassago.configs.validation`
+- `uv run vassago configs validate`
 - `scc --ci src scripts docs`
 
 这里的行为可以概括为：
