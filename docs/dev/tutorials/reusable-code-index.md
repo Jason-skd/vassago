@@ -221,6 +221,7 @@
 - `MmwavePacketParser`
 - `MmwavePacket`
 - `MmwaveTlv`
+- `SmokeTestSummaryAccumulator`
 - `SmokeTestSummary`
 - `summarize_packets()`
 
@@ -230,6 +231,7 @@
 - buffer 中的噪声恢复
 - packet header 解析
 - TLV payload 最佳努力解析
+- streaming summary 累加
 - frame gap、非单调 frame 统计
 
 最重要的原则：

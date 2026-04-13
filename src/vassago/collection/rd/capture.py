@@ -7,9 +7,12 @@ import random
 import select
 import sys
 import time
+from collections.abc import Callable
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from typing import Self
+from typing import cast
 
 import serial
 from rich.console import Console
@@ -19,11 +22,9 @@ from vassago.collection.rd import session as collection_session
 from vassago.collection.rd import ui as collection_ui
 from vassago.collection.rd.config import WindowRange
 from vassago.collection.rd.paths import resolve_repo_path
-from vassago.collection.rd import visualizer
 from vassago.firmware.mmwave import config as mmwave_config
-from vassago.firmware.mmwave.protocol import MmwavePacketParser
 from vassago.firmware.mmwave.protocol import SmokeTestSummary
-from vassago.firmware.mmwave.protocol import summarize_packets
+from vassago.firmware.mmwave.protocol import SmokeTestSummaryAccumulator
 from vassago.firmware.mmwave.smoke_test import DEFAULT_READ_SIZE
 from vassago.firmware.mmwave.smoke_test import DEFAULT_READ_TIMEOUT_SECONDS
 from vassago.firmware.mmwave.smoke_test import send_config
@@ -93,6 +94,48 @@ class RunSessionSummary:
     session_status: str
     accepted_take_count: int
     remaining_take_count: int
+
+
+@dataclass(slots=True, frozen=True)
+class ReviewedTakeCapture:
+    """Capture output plus the first-line analysis used by run_session."""
+
+    capture_result: TakeCaptureResult
+    summary: SmokeTestSummary
+    qc_decision: quick_qc.QuickQcDecision
+
+
+type CaptureByteConsumer = Callable[[bytes], None]
+
+
+@dataclass(slots=True, frozen=True)
+class _CaptureTimeline:
+    """Absolute timestamps that drive one capture attempt."""
+
+    go_at: float
+    capture_start_at: float
+    capture_end_at: float
+    target_end_at: float
+
+
+@dataclass(slots=True)
+class _CaptureLoopState:
+    """Mutable flags for one running capture loop."""
+
+    last_countdown_value: int | None = None
+    capture_started: bool = False
+    go_announced: bool = False
+    target_end_announced: bool = False
+
+
+@dataclass(slots=True)
+class _CaptureRuntime:
+    """Mutable runtime state shared across one active capture loop."""
+
+    connection: serial.Serial
+    read_size: int
+    raw_capture: bytearray
+    byte_consumers: tuple[CaptureByteConsumer, ...]
 
 
 def run_session(
@@ -224,24 +267,16 @@ def _run_take_loop(
             if action == collection_ui.TAKE_ACTION_QUIT:
                 return
 
-            capture_result = capture_take(
+            reviewed_capture = review_capture_take(
                 connection,
                 attempt_plan=attempt_plan,
                 read_size=read_size,
             )
-            summary = summarize_raw_capture(capture_result.raw_capture)
-            qc_decision = quick_qc.evaluate_capture(
-                summary=summary,
-                capture_window=capture_result.capture_window,
-                target_window=capture_result.target_window,
-                marked_window=capture_result.marked_window,
-                marked_window_end_grace_s=(
-                    attempt_plan.marked_window_deadline_s
-                    - attempt_plan.target_window.end_s
-                ),
+            collection_ui.render_quick_qc(
+                console,
+                decision=reviewed_capture.qc_decision,
             )
-            collection_ui.render_quick_qc(console, decision=qc_decision)
-            if not qc_decision.accepted:
+            if not reviewed_capture.qc_decision.accepted:
                 decision = collection_ui.prompt_rejected_take_action(take_id=take_id)
                 if decision == collection_ui.TAKE_DECISION_QUIT:
                     return
@@ -249,10 +284,10 @@ def _run_take_loop(
 
             collection_ui.render_capture_summary(
                 console,
-                summary=summary,
-                capture_window=capture_result.capture_window,
-                target_window=capture_result.target_window,
-                marked_window=capture_result.marked_window,
+                summary=reviewed_capture.summary,
+                capture_window=reviewed_capture.capture_result.capture_window,
+                target_window=reviewed_capture.capture_result.target_window,
+                marked_window=reviewed_capture.capture_result.marked_window,
             )
 
             decision = collection_ui.prompt_take_decision(take_id=take_id)
@@ -265,14 +300,14 @@ def _run_take_loop(
                 manifest_path=manifest_path,
                 take=take,
             )
-            raw_uart_path.write_bytes(capture_result.raw_capture)
+            raw_uart_path.write_bytes(reviewed_capture.capture_result.raw_capture)
             collection_session.accept_take(
                 manifest=manifest,
                 take=take,
                 raw_uart_path=raw_uart_path,
-                capture_window=capture_result.capture_window,
-                target_window=capture_result.target_window,
-                marked_window=capture_result.marked_window,
+                capture_window=reviewed_capture.capture_result.capture_window,
+                target_window=reviewed_capture.capture_result.target_window,
+                marked_window=reviewed_capture.capture_result.marked_window,
             )
             collection_session.write_manifest(
                 manifest_path=manifest_path,
@@ -280,11 +315,43 @@ def _run_take_loop(
             )
 
 
+def review_capture_take(
+    connection: serial.Serial,
+    *,
+    attempt_plan: AttemptPlan,
+    read_size: int,
+) -> ReviewedTakeCapture:
+    """Capture one take and run the current summary/QC pipeline inline."""
+    summary_accumulator = SmokeTestSummaryAccumulator()
+    capture_result = capture_take(
+        connection,
+        attempt_plan=attempt_plan,
+        read_size=read_size,
+        byte_consumers=(summary_accumulator.feed,),
+    )
+    summary = summary_accumulator.build_summary()
+    qc_decision = quick_qc.evaluate_capture(
+        summary=summary,
+        capture_window=capture_result.capture_window,
+        target_window=capture_result.target_window,
+        marked_window=capture_result.marked_window,
+        marked_window_end_grace_s=(
+            attempt_plan.marked_window_deadline_s - attempt_plan.target_window.end_s
+        ),
+    )
+    return ReviewedTakeCapture(
+        capture_result=capture_result,
+        summary=summary,
+        qc_decision=qc_decision,
+    )
+
+
 def capture_take(
     connection: serial.Serial,
     *,
     attempt_plan: AttemptPlan,
     read_size: int,
+    byte_consumers: Iterable[CaptureByteConsumer] = (),
 ) -> TakeCaptureResult:
     """Capture one attempt with fixed countdown, GO, and hidden capture start."""
     console.print("state: countdown")
@@ -292,24 +359,17 @@ def capture_take(
         f"control: wait for GO, then press {attempt_plan.end_mark_key} to mark end"
     )
 
-    timeline_start = time.perf_counter()
-    go_at = timeline_start + attempt_plan.countdown_duration_s
-    capture_start_at = timeline_start + attempt_plan.capture_start_delay_s
-    capture_end_at = capture_start_at + (
-        attempt_plan.capture_window.end_s - attempt_plan.capture_window.start_s
+    timeline = _build_capture_timeline(attempt_plan)
+    loop_state = _CaptureLoopState()
+    runtime = _CaptureRuntime(
+        connection=connection,
+        read_size=read_size,
+        raw_capture=bytearray(),
+        byte_consumers=tuple(byte_consumers),
     )
-    target_end_at = capture_start_at + attempt_plan.target_window.end_s
-    raw_capture = bytearray()
-
-    last_countdown_value: int | None = None
-    capture_started = False
-    go_announced = False
-    target_end_announced = False
 
     original_timeout = connection.timeout
     connection.timeout = _capture_poll_timeout(original_timeout)
-
-    vis_proc, vis_queue = visualizer.start_visualizer()
 
     try:
         with _MarkedWindowRecorder(
@@ -317,70 +377,190 @@ def capture_take(
             target_window=attempt_plan.target_window,
             end_mark_key=attempt_plan.end_mark_key,
         ) as marker:
-            while True:
-                now = time.perf_counter()
-                if not go_announced:
-                    last_countdown_value = _emit_countdown_tick(
-                        now=now,
-                        go_at=go_at,
-                        last_countdown_value=last_countdown_value,
-                    )
-
-                if not capture_started and now >= capture_start_at:
-                    capture_started = True
-                    connection.reset_input_buffer()
-
-                if not go_announced and now >= go_at:
-                    go_announced = True
-                    _render_go_prompt()
-
-                if capture_started:
-                    capture_elapsed_s = min(
-                        attempt_plan.capture_window.end_s,
-                        now - capture_start_at,
-                    )
-                    marker.poll(elapsed_seconds=capture_elapsed_s)
-
-                    if not target_end_announced and now >= target_end_at:
-                        target_end_announced = True
-                        console.print("target_window ended")
-
-                    if now >= capture_end_at:
-                        break
-
-                    chunk = connection.read(read_size)
-                    if chunk:
-                        raw_capture.extend(chunk)
-                        if vis_queue is not None:
-                            try:
-                                vis_queue.put_nowait(chunk)
-                            except Exception:
-                                pass
-                    marker.poll(
-                        elapsed_seconds=min(
-                            attempt_plan.capture_window.end_s,
-                            time.perf_counter() - capture_start_at,
-                        ),
-                    )
-                    continue
-
-                time.sleep(CAPTURE_LOOP_SLEEP_SECONDS)
-
+            _run_capture_loop(
+                attempt_plan=attempt_plan,
+                runtime=runtime,
+                timeline=timeline,
+                loop_state=loop_state,
+                marker=marker,
+            )
             marker.poll(elapsed_seconds=attempt_plan.capture_window.end_s)
             marked_window = marker.window
     finally:
         connection.timeout = original_timeout
-        if vis_proc is not None:
-            visualizer.stop_visualizer(vis_proc, vis_queue)
 
     console.print("capture_window ended")
+    trailing_bytes = read_available_bytes(connection, read_size=read_size)
+    _record_capture_bytes(
+        runtime.raw_capture,
+        chunk=trailing_bytes,
+        byte_consumers=runtime.byte_consumers,
+    )
     return TakeCaptureResult(
-        raw_capture=bytes(raw_capture)
-        + read_available_bytes(connection, read_size=read_size),
+        raw_capture=bytes(runtime.raw_capture),
         capture_window=attempt_plan.capture_window,
         target_window=attempt_plan.target_window,
         marked_window=marked_window,
     )
+
+
+def _build_capture_timeline(attempt_plan: AttemptPlan) -> _CaptureTimeline:
+    """Return the absolute timestamps that drive one capture attempt."""
+    timeline_start = time.perf_counter()
+    capture_start_at = timeline_start + attempt_plan.capture_start_delay_s
+    capture_duration_s = (
+        attempt_plan.capture_window.end_s - attempt_plan.capture_window.start_s
+    )
+    return _CaptureTimeline(
+        go_at=timeline_start + attempt_plan.countdown_duration_s,
+        capture_start_at=capture_start_at,
+        capture_end_at=capture_start_at + capture_duration_s,
+        target_end_at=capture_start_at + attempt_plan.target_window.end_s,
+    )
+
+
+def _run_capture_loop(
+    *,
+    attempt_plan: AttemptPlan,
+    runtime: _CaptureRuntime,
+    timeline: _CaptureTimeline,
+    loop_state: _CaptureLoopState,
+    marker: _MarkedWindowRecorder,
+) -> None:
+    """Drive the live capture loop until the fixed capture window ends."""
+    while True:
+        now = time.perf_counter()
+        _update_countdown(loop_state=loop_state, timeline=timeline, now=now)
+        _maybe_start_capture(
+            connection=runtime.connection,
+            timeline=timeline,
+            loop_state=loop_state,
+            now=now,
+        )
+        _maybe_render_go_prompt(
+            timeline=timeline,
+            loop_state=loop_state,
+            now=now,
+        )
+        if not loop_state.capture_started:
+            time.sleep(CAPTURE_LOOP_SLEEP_SECONDS)
+            continue
+        if _capture_window_finished(
+            attempt_plan=attempt_plan,
+            runtime=runtime,
+            timeline=timeline,
+            loop_state=loop_state,
+            marker=marker,
+            now=now,
+        ):
+            return
+
+
+def _update_countdown(
+    *,
+    loop_state: _CaptureLoopState,
+    timeline: _CaptureTimeline,
+    now: float,
+) -> None:
+    """Render countdown ticks until GO has been announced."""
+    if loop_state.go_announced:
+        return
+    loop_state.last_countdown_value = _emit_countdown_tick(
+        now=now,
+        go_at=timeline.go_at,
+        last_countdown_value=loop_state.last_countdown_value,
+    )
+
+
+def _maybe_start_capture(
+    *,
+    connection: serial.Serial,
+    timeline: _CaptureTimeline,
+    loop_state: _CaptureLoopState,
+    now: float,
+) -> None:
+    """Reset the host input buffer once the hidden capture start is reached."""
+    if loop_state.capture_started or now < timeline.capture_start_at:
+        return
+    loop_state.capture_started = True
+    connection.reset_input_buffer()
+
+
+def _maybe_render_go_prompt(
+    *,
+    timeline: _CaptureTimeline,
+    loop_state: _CaptureLoopState,
+    now: float,
+) -> None:
+    """Render GO exactly once when the countdown is complete."""
+    if loop_state.go_announced or now < timeline.go_at:
+        return
+    loop_state.go_announced = True
+    _render_go_prompt()
+
+
+def _capture_window_finished(
+    *,
+    attempt_plan: AttemptPlan,
+    runtime: _CaptureRuntime,
+    timeline: _CaptureTimeline,
+    loop_state: _CaptureLoopState,
+    marker: _MarkedWindowRecorder,
+    now: float,
+) -> bool:
+    """Process one active-capture iteration and return whether capture is done."""
+    _poll_capture_marker(
+        marker=marker,
+        capture_duration_s=attempt_plan.capture_window.end_s,
+        capture_start_at=timeline.capture_start_at,
+    )
+    if not loop_state.target_end_announced and now >= timeline.target_end_at:
+        loop_state.target_end_announced = True
+        console.print("target_window ended")
+    if now >= timeline.capture_end_at:
+        return True
+
+    chunk = runtime.connection.read(runtime.read_size)
+    _record_capture_bytes(
+        runtime.raw_capture,
+        chunk=chunk,
+        byte_consumers=runtime.byte_consumers,
+    )
+    _poll_capture_marker(
+        marker=marker,
+        capture_duration_s=attempt_plan.capture_window.end_s,
+        capture_start_at=timeline.capture_start_at,
+    )
+    return False
+
+
+def _poll_capture_marker(
+    *,
+    marker: _MarkedWindowRecorder,
+    capture_duration_s: float,
+    capture_start_at: float,
+) -> None:
+    """Poll the end-mark recorder with the current elapsed capture time."""
+    marker.poll(
+        elapsed_seconds=min(
+            capture_duration_s,
+            time.perf_counter() - capture_start_at,
+        ),
+    )
+
+
+def _record_capture_bytes(
+    raw_capture: bytearray,
+    *,
+    chunk: bytes,
+    byte_consumers: tuple[CaptureByteConsumer, ...],
+) -> None:
+    """Append one raw chunk and broadcast it to any inline consumers."""
+    if not chunk:
+        return
+    raw_capture.extend(chunk)
+    for consumer in byte_consumers:
+        consumer(chunk)
 
 
 def _render_go_prompt() -> None:
@@ -404,13 +584,9 @@ def _countdown_number_style(visible_value: int) -> str:
 
 def summarize_raw_capture(raw_capture: bytes) -> SmokeTestSummary:
     """Parse one captured UART window into the same summary used by smoke-test."""
-    parser = MmwavePacketParser()
-    packets = parser.feed(raw_capture)
-    return summarize_packets(
-        packets=packets,
-        bytes_read=len(raw_capture),
-        invalid_packet_count=parser.invalid_packet_count,
-    )
+    summary_accumulator = SmokeTestSummaryAccumulator()
+    summary_accumulator.feed(raw_capture)
+    return summary_accumulator.build_summary()
 
 
 def read_available_bytes(
@@ -639,35 +815,22 @@ class _MarkedWindowRecorder:
 
     def poll(self, *, elapsed_seconds: float) -> None:
         """Record the end mark once the operator presses the configured key."""
-        if self._stdin_fd is None:
+        if not self._ready_for_poll(elapsed_seconds):
             return
-        if self.end_s is not None:
-            return
-        if elapsed_seconds < self.target_window.start_s:
-            return
-
-        if msvcrt is not None:
-            if not msvcrt.kbhit():
-                return
-            try:
-                key = msvcrt.getch().decode("utf-8")
-            except UnicodeDecodeError:
-                return
-        else:
-            ready, _, _ = select.select([sys.stdin], [], [], 0.0)
-            if not ready:
-                return
-
-            try:
-                key = sys.stdin.read(1)
-            except OSError:
-                return
-
-        if not _matches_end_mark_key(key, self.end_mark_key):
+        key = _read_non_blocking_key()
+        if key is None or not _matches_end_mark_key(key, self.end_mark_key):
             return
 
         self.end_s = elapsed_seconds
         console.print(f"mark: end @ {elapsed_seconds:.2f}s")
+
+    def _ready_for_poll(self, elapsed_seconds: float) -> bool:
+        """Return whether one poll call may still record an end mark."""
+        return (
+            self._stdin_fd is not None
+            and self.end_s is None
+            and elapsed_seconds >= self.target_window.start_s
+        )
 
 
 def _matches_end_mark_key(key: str, configured_key: str) -> bool:
@@ -681,3 +844,57 @@ def _normalize_key_name(value: str) -> str:
     if value == " " or normalized == "space":
         return "space"
     return normalized
+
+
+def _read_non_blocking_key() -> str | None:
+    """Return one keypress when available without blocking the capture loop."""
+    if msvcrt is not None:
+        return _read_windows_key()
+    return _read_posix_key()
+
+
+def _read_windows_key() -> str | None:
+    """Return one keypress from msvcrt when available."""
+    if not _msvcrt_key_available():
+        return None
+
+    raw_key = _msvcrt_getch()
+    if raw_key is None:
+        return None
+
+    try:
+        return raw_key.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
+def _msvcrt_key_available() -> bool:
+    """Return whether msvcrt reports a pending keypress."""
+    if msvcrt is None:
+        return False
+    kbhit = getattr(msvcrt, "kbhit", None)
+    if not callable(kbhit):
+        return False
+    return cast("Callable[[], bool]", kbhit)()
+
+
+def _msvcrt_getch() -> bytes | None:
+    """Return one raw keypress from msvcrt when supported."""
+    if msvcrt is None:
+        return None
+    getch = getattr(msvcrt, "getch", None)
+    if not callable(getch):
+        return None
+    return cast("Callable[[], bytes]", getch)()
+
+
+def _read_posix_key() -> str | None:
+    """Return one keypress from stdin when POSIX non-blocking I/O is ready."""
+    ready, _, _ = select.select([sys.stdin], [], [], 0.0)
+    if not ready:
+        return None
+
+    try:
+        return sys.stdin.read(1)
+    except OSError:
+        return None

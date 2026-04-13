@@ -94,6 +94,44 @@ class SmokeTestSummary:
         return self.valid_packet_count >= minimum_packet_count
 
 
+class SmokeTestSummaryAccumulator:
+    """Incrementally build a smoke-test summary from streamed UART bytes."""
+
+    def __init__(self, *, packet_parser: MmwavePacketParser | None = None) -> None:
+        """Initialize the accumulator with an optional shared packet parser."""
+        self._packet_parser = packet_parser or MmwavePacketParser()
+        self._packets: list[MmwavePacket] = []
+        self._bytes_read = 0
+
+    @property
+    def bytes_read(self) -> int:
+        """Return the total byte count fed into the accumulator."""
+        return self._bytes_read
+
+    @property
+    def invalid_packet_count(self) -> int:
+        """Return the invalid packet count reported by the shared parser."""
+        return self._packet_parser.invalid_packet_count
+
+    @property
+    def buffered_byte_count(self) -> int:
+        """Return the byte count still buffered by the shared parser."""
+        return self._packet_parser.buffered_byte_count
+
+    def feed(self, data: bytes) -> None:
+        """Consume one raw byte chunk and update the incremental summary state."""
+        self._bytes_read += len(data)
+        self._packets.extend(self._packet_parser.feed(data))
+
+    def build_summary(self) -> SmokeTestSummary:
+        """Return the current aggregate summary from streamed bytes so far."""
+        return summarize_packets(
+            packets=self._packets,
+            bytes_read=self._bytes_read,
+            invalid_packet_count=self.invalid_packet_count,
+        )
+
+
 class MmwavePacketParser:
     """Streaming parser for TI mmWave-style UART packets."""
 
