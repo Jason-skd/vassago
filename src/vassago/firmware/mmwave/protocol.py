@@ -20,6 +20,9 @@ TLV_HEADER_FORMAT = "<II"
 TLV_HEADER_SIZE = struct.calcsize(TLV_HEADER_FORMAT)
 MAX_PACKET_SIZE_BYTES = 1_048_576
 type TlvLengthMode = Literal["payload", "total"]
+type TlvParseScore = tuple[int, int, int, int, int, int]
+TLV_TYPE_PLAUSIBLE_UPPER_BOUND = 255
+SMALL_TRAILING_PADDING_LIMIT_BYTES = 32
 
 
 @dataclass(slots=True, frozen=True)
@@ -249,7 +252,11 @@ def _parse_tlvs_with_best_effort(
 ) -> tuple[MmwaveTlv, ...]:
     """Parse TLVs while tolerating both total-length and payload-length styles."""
     best_tlvs: tuple[MmwaveTlv, ...] = ()
-    best_offset = HEADER_SIZE
+    best_score = _tlv_parse_score(
+        parsed_tlvs=best_tlvs,
+        offset=HEADER_SIZE,
+        total_packet_length=total_packet_length,
+    )
     states: list[tuple[int, tuple[MmwaveTlv, ...], int]] = [(HEADER_SIZE, (), num_tlvs)]
 
     while states:
@@ -257,11 +264,15 @@ def _parse_tlvs_with_best_effort(
         if _parsed_tlvs_are_better(
             parsed_tlvs=parsed_tlvs,
             offset=offset,
-            best_tlvs=best_tlvs,
-            best_offset=best_offset,
+            best_score=best_score,
+            total_packet_length=total_packet_length,
         ):
             best_tlvs = parsed_tlvs
-            best_offset = offset
+            best_score = _tlv_parse_score(
+                parsed_tlvs=parsed_tlvs,
+                offset=offset,
+                total_packet_length=total_packet_length,
+            )
 
         if tlvs_left <= 0 or offset + TLV_HEADER_SIZE > total_packet_length:
             continue
@@ -289,9 +300,6 @@ def _parse_tlvs_with_best_effort(
             )
         )
         states.extend(reversed(candidate_states))
-
-        if len(best_tlvs) == num_tlvs:
-            break
 
     return best_tlvs
 
@@ -353,13 +361,50 @@ def _parsed_tlvs_are_better(
     *,
     parsed_tlvs: tuple[MmwaveTlv, ...],
     offset: int,
-    best_tlvs: tuple[MmwaveTlv, ...],
-    best_offset: int,
+    best_score: TlvParseScore,
+    total_packet_length: int,
 ) -> bool:
     """Return whether one TLV parse path is better than the current best."""
-    if len(parsed_tlvs) != len(best_tlvs):
-        return len(parsed_tlvs) > len(best_tlvs)
-    return offset > best_offset
+    return (
+        _tlv_parse_score(
+            parsed_tlvs=parsed_tlvs,
+            offset=offset,
+            total_packet_length=total_packet_length,
+        )
+        > best_score
+    )
+
+
+def _tlv_parse_score(
+    *,
+    parsed_tlvs: tuple[MmwaveTlv, ...],
+    offset: int,
+    total_packet_length: int,
+) -> TlvParseScore:
+    """Rank one candidate TLV path by completeness and parse plausibility."""
+    trailing_padding = total_packet_length - offset
+    tlv_types = tuple(tlv.tlv_type for tlv in parsed_tlvs)
+    return (
+        len(parsed_tlvs),
+        int(_has_small_aligned_trailing_padding(trailing_padding)),
+        sum(1 for tlv in parsed_tlvs if tlv.payload_length % 4 == 0),
+        sum(
+            1
+            for tlv in parsed_tlvs
+            if 0 <= tlv.tlv_type <= TLV_TYPE_PLAUSIBLE_UPPER_BOUND
+        ),
+        len(set(tlv_types)),
+        offset,
+    )
+
+
+def _has_small_aligned_trailing_padding(trailing_padding: int) -> bool:
+    """Return whether one candidate leaves a small 32-bit-aligned tail."""
+    return (
+        trailing_padding >= 0
+        and trailing_padding < SMALL_TRAILING_PADDING_LIMIT_BYTES
+        and trailing_padding % 4 == 0
+    )
 
 
 def summarize_packets(

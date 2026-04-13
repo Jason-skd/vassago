@@ -16,6 +16,8 @@ def build_packet(
     tlvs: list[tuple[int, bytes]],
     *,
     length_mode: str = "payload",
+    num_detected_objects: int = 0,
+    trailing_padding: bytes = b"",
 ) -> bytes:
     """Build a minimal synthetic mmWave packet."""
     tlv_payload = b""
@@ -25,7 +27,7 @@ def build_packet(
         )
         tlv_payload += struct.pack("<II", tlv_type, tlv_length) + payload
 
-    total_packet_length = HEADER_SIZE + len(tlv_payload)
+    total_packet_length = HEADER_SIZE + len(tlv_payload) + len(trailing_padding)
     header = MAGIC_WORD + struct.pack(
         "<8I",
         0x03060000,
@@ -33,11 +35,11 @@ def build_packet(
         0xA6843,
         frame_number,
         0,
-        0,
+        num_detected_objects,
         len(tlvs),
         0,
     )
-    return header + tlv_payload
+    return header + tlv_payload + trailing_padding
 
 
 def test_packet_parser_recovers_after_leading_noise() -> None:
@@ -81,6 +83,36 @@ def test_packet_parser_reads_tlv_payloads_with_total_length_mode() -> None:
     assert packets[0].tlvs[0].payload == b"\x00\x01\x02\x03"
     assert packets[0].tlvs[0].length_mode == "total"
     assert packets[0].tlvs[1].payload == b"\x10\x11\x12\x13\x14\x15"
+
+
+def test_packet_parser_prefers_plausible_payload_path_for_ambiguous_packet() -> None:
+    parser = MmwavePacketParser()
+    point_payload = struct.pack("<4f", 1.0, 0.25, -0.01, 0.0)
+    packets = parser.feed(
+        build_packet(
+            7,
+            [
+                (1, point_payload),
+                (7, b"\x36\x00\xba\x01"),
+                (5, b"X" * 24),
+                (6, b"Y" * 16 + struct.pack("<II", 1, 49)),
+                (9, b"Z" * 28),
+            ],
+            num_detected_objects=1,
+            trailing_padding=b"\x00" * 8,
+        )
+    )
+
+    assert len(packets) == 1
+    assert packets[0].tlv_types == (1, 7, 5, 6, 9)
+    assert tuple(tlv.length_mode for tlv in packets[0].tlvs) == (
+        "payload",
+        "payload",
+        "payload",
+        "payload",
+        "payload",
+    )
+    assert packets[0].tlvs[0].payload == point_payload
 
 
 def test_summarize_packets_counts_frame_gaps_and_tlv_types() -> None:
