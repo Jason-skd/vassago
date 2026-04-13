@@ -220,6 +220,7 @@
 
 - `MmwavePacketParser`
 - `MmwavePacket`
+- `MmwaveTlv`
 - `SmokeTestSummary`
 - `summarize_packets()`
 
@@ -228,8 +229,41 @@
 - magic word 对齐
 - buffer 中的噪声恢复
 - packet header 解析
-- TLV type 最佳努力解析
+- TLV payload 最佳努力解析
 - frame gap、非单调 frame 统计
+
+最重要的原则：
+
+- 需要 packet/TLV 边界时，先扩展或复用这里
+- 不要在 GUI、collection 或一次性脚本里再各写一套 magic word 对齐和 TLV 遍历
+
+### [src/vassago/firmware/mmwave/point_cloud.py](../../../src/vassago/firmware/mmwave/point_cloud.py)
+
+优先复用场景：
+
+- 需要从 mmWave packet 或原始字节流里提取点云
+- 需要在 live capture 和离线 replay 中共用同一套点云解码逻辑
+- 需要构造后续切割、点云缓存或可视化要消费的语义帧
+
+优先复用的函数与类型：
+
+- `PointCloudStreamDecoder`
+- `PointCloudFrame`
+- `PointCloudPoint`
+- `extract_point_cloud_frame()`
+- `iter_point_cloud_frames()`
+- `decode_point_cloud_tlv()`
+
+它已经处理：
+
+- 基于共享 packet parser 的点云流式解码
+- 点云 TLV payload 到 `(x, y, z, velocity)` 语义点的转换
+- live / replay 共用的点云 frame 模型
+
+不要再做的事：
+
+- 在 visualizer、cutting、exporter 里各自手写一份点云 TLV 解析
+- 让 GUI 模块继续承担长期协议解析职责
 
 ### [src/vassago/firmware/mmwave/smoke_test.py](../../../src/vassago/firmware/mmwave/smoke_test.py)
 

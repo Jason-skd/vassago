@@ -6,6 +6,7 @@ import struct
 from collections import Counter
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+from typing import Literal
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -18,11 +19,32 @@ HEADER_SIZE = MAGIC_WORD_SIZE + HEADER_BODY_SIZE
 TLV_HEADER_FORMAT = "<II"
 TLV_HEADER_SIZE = struct.calcsize(TLV_HEADER_FORMAT)
 MAX_PACKET_SIZE_BYTES = 1_048_576
+type TlvLengthMode = Literal["payload", "total"]
+
+
+@dataclass(slots=True, frozen=True)
+class MmwaveTlv:
+    """One parsed TLV plus its payload bytes."""
+
+    tlv_type: int
+    payload: bytes
+    raw_length: int
+    length_mode: TlvLengthMode
+
+    @property
+    def payload_length(self) -> int:
+        """Return the TLV payload byte count."""
+        return len(self.payload)
+
+    @property
+    def total_size(self) -> int:
+        """Return the full TLV byte size including its header."""
+        return TLV_HEADER_SIZE + self.payload_length
 
 
 @dataclass(slots=True, frozen=True)
 class MmwavePacket:
-    """Parsed mmWave UART packet header plus TLV type summary."""
+    """Parsed mmWave UART packet header plus TLV payloads."""
 
     version: int
     total_packet_length: int
@@ -32,7 +54,26 @@ class MmwavePacket:
     num_detected_objects: int
     num_tlvs: int
     sub_frame_number: int
-    tlv_types: tuple[int, ...]
+    tlvs: tuple[MmwaveTlv, ...]
+
+    @property
+    def tlv_types(self) -> tuple[int, ...]:
+        """Return the TLV type list in wire order."""
+        return tuple(tlv.tlv_type for tlv in self.tlvs)
+
+
+@dataclass(slots=True, frozen=True)
+class _MmwavePacketHeader:
+    """Validated fixed-size mmWave packet header."""
+
+    version: int
+    total_packet_length: int
+    platform: int
+    frame_number: int
+    time_cpu_cycles: int
+    num_detected_objects: int
+    num_tlvs: int
+    sub_frame_number: int
 
 
 @dataclass(slots=True, frozen=True)
@@ -98,7 +139,7 @@ class MmwavePacketParser:
             packet_bytes = bytes(self._buffer[: header.total_packet_length])
             del self._buffer[: header.total_packet_length]
 
-            tlv_types = self._parse_tlv_types(
+            tlvs = self._parse_tlvs(
                 packet_bytes=packet_bytes,
                 total_packet_length=header.total_packet_length,
                 num_tlvs=header.num_tlvs,
@@ -113,12 +154,12 @@ class MmwavePacketParser:
                     num_detected_objects=header.num_detected_objects,
                     num_tlvs=header.num_tlvs,
                     sub_frame_number=header.sub_frame_number,
-                    tlv_types=tlv_types,
+                    tlvs=tlvs,
                 ),
             )
 
     @staticmethod
-    def _parse_header(buffer: bytearray) -> MmwavePacket | None:
+    def _parse_header(buffer: bytearray) -> _MmwavePacketHeader | None:
         """Parse the fixed-size packet header from the current buffer."""
         (
             version,
@@ -136,7 +177,7 @@ class MmwavePacketParser:
         if total_packet_length > MAX_PACKET_SIZE_BYTES:
             return None
 
-        return MmwavePacket(
+        return _MmwavePacketHeader(
             version=version,
             total_packet_length=total_packet_length,
             platform=platform,
@@ -145,38 +186,44 @@ class MmwavePacketParser:
             num_detected_objects=num_detected_objects,
             num_tlvs=num_tlvs,
             sub_frame_number=sub_frame_number,
-            tlv_types=(),
         )
 
     @staticmethod
-    def _parse_tlv_types(
+    def _parse_tlvs(
         *,
         packet_bytes: bytes,
         total_packet_length: int,
         num_tlvs: int,
-    ) -> tuple[int, ...]:
-        """Parse TLV headers and return the TLV type list for the packet."""
-        return _parse_tlv_types_with_best_effort(
+    ) -> tuple[MmwaveTlv, ...]:
+        """Parse TLV headers and payloads for the packet."""
+        return _parse_tlvs_with_best_effort(
             packet_bytes=packet_bytes,
             total_packet_length=total_packet_length,
             num_tlvs=num_tlvs,
         )
 
 
-def _parse_tlv_types_with_best_effort(
+def _parse_tlvs_with_best_effort(
     *,
     packet_bytes: bytes,
     total_packet_length: int,
     num_tlvs: int,
-) -> tuple[int, ...]:
+) -> tuple[MmwaveTlv, ...]:
     """Parse TLVs while tolerating both total-length and payload-length styles."""
-    best_tlv_types: tuple[int, ...] = ()
-    states: list[tuple[int, tuple[int, ...], int]] = [(HEADER_SIZE, (), num_tlvs)]
+    best_tlvs: tuple[MmwaveTlv, ...] = ()
+    best_offset = HEADER_SIZE
+    states: list[tuple[int, tuple[MmwaveTlv, ...], int]] = [(HEADER_SIZE, (), num_tlvs)]
 
     while states:
-        offset, parsed_tlv_types, tlvs_left = states.pop()
-        if len(parsed_tlv_types) > len(best_tlv_types):
-            best_tlv_types = parsed_tlv_types
+        offset, parsed_tlvs, tlvs_left = states.pop()
+        if _parsed_tlvs_are_better(
+            parsed_tlvs=parsed_tlvs,
+            offset=offset,
+            best_tlvs=best_tlvs,
+            best_offset=best_offset,
+        ):
+            best_tlvs = parsed_tlvs
+            best_offset = offset
 
         if tlvs_left <= 0 or offset + TLV_HEADER_SIZE > total_packet_length:
             continue
@@ -186,45 +233,95 @@ def _parse_tlv_types_with_best_effort(
             packet_bytes,
             offset,
         )
-        states.extend(
-            (
-                offset + candidate_total_size,
-                (*parsed_tlv_types, tlv_type),
-                tlvs_left - 1,
+        candidate_states = tuple(
+            _candidate_tlv_state(
+                packet_bytes=packet_bytes,
+                offset=offset,
+                tlv_type=tlv_type,
+                tlv_length_raw=tlv_length_raw,
+                candidate_total_size=candidate_total_size,
+                length_mode=length_mode,
+                parsed_tlvs=parsed_tlvs,
+                tlvs_left=tlvs_left,
             )
-            for candidate_total_size in reversed(
-                _candidate_tlv_total_sizes(
-                    offset=offset,
-                    tlv_length_raw=tlv_length_raw,
-                    total_packet_length=total_packet_length,
-                ),
+            for candidate_total_size, length_mode in _candidate_tlv_layouts(
+                offset=offset,
+                tlv_length_raw=tlv_length_raw,
+                total_packet_length=total_packet_length,
             )
         )
+        states.extend(reversed(candidate_states))
 
-        if len(best_tlv_types) == num_tlvs:
+        if len(best_tlvs) == num_tlvs:
             break
 
-    return best_tlv_types
+    return best_tlvs
 
 
-def _candidate_tlv_total_sizes(
+def _candidate_tlv_state(
+    *,
+    packet_bytes: bytes,
+    offset: int,
+    tlv_type: int,
+    tlv_length_raw: int,
+    candidate_total_size: int,
+    length_mode: TlvLengthMode,
+    parsed_tlvs: tuple[MmwaveTlv, ...],
+    tlvs_left: int,
+) -> tuple[int, tuple[MmwaveTlv, ...], int]:
+    """Build one parser state for a candidate TLV layout."""
+    payload_start = offset + TLV_HEADER_SIZE
+    payload_end = offset + candidate_total_size
+    payload = packet_bytes[payload_start:payload_end]
+    tlv = MmwaveTlv(
+        tlv_type=tlv_type,
+        payload=payload,
+        raw_length=tlv_length_raw,
+        length_mode=length_mode,
+    )
+    return (
+        offset + candidate_total_size,
+        (*parsed_tlvs, tlv),
+        tlvs_left - 1,
+    )
+
+
+def _candidate_tlv_layouts(
     *,
     offset: int,
     tlv_length_raw: int,
     total_packet_length: int,
-) -> tuple[int, ...]:
-    """Return viable TLV total sizes for standard and payload-length variants."""
-    candidate_sizes: list[int] = []
+) -> tuple[tuple[int, TlvLengthMode], ...]:
+    """Return viable TLV layouts for total-length and payload-length variants."""
+    candidate_layouts: list[tuple[int, TlvLengthMode]] = []
+    raw_layouts: tuple[tuple[int, TlvLengthMode], ...] = (
+        (tlv_length_raw, "total"),
+        (TLV_HEADER_SIZE + tlv_length_raw, "payload"),
+    )
 
-    for candidate_total_size in (tlv_length_raw, TLV_HEADER_SIZE + tlv_length_raw):
+    for candidate_total_size, length_mode in raw_layouts:
         if candidate_total_size < TLV_HEADER_SIZE:
             continue
         if offset + candidate_total_size > total_packet_length:
             continue
-        if candidate_total_size not in candidate_sizes:
-            candidate_sizes.append(candidate_total_size)
+        candidate_layout = (candidate_total_size, length_mode)
+        if candidate_layout not in candidate_layouts:
+            candidate_layouts.append(candidate_layout)
 
-    return tuple(candidate_sizes)
+    return tuple(candidate_layouts)
+
+
+def _parsed_tlvs_are_better(
+    *,
+    parsed_tlvs: tuple[MmwaveTlv, ...],
+    offset: int,
+    best_tlvs: tuple[MmwaveTlv, ...],
+    best_offset: int,
+) -> bool:
+    """Return whether one TLV parse path is better than the current best."""
+    if len(parsed_tlvs) != len(best_tlvs):
+        return len(parsed_tlvs) > len(best_tlvs)
+    return offset > best_offset
 
 
 def summarize_packets(
