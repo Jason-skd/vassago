@@ -27,6 +27,8 @@
   `configs/` 目录结构、人类可读的编辑边界与文件放置规则。
 - [configs-command-guide.md](configs-command-guide.md)
   `configs` 相关命令指南，覆盖文件发现、配置消费与全量验证。
+- [mmwave_packet_tlv_guide.md](mmwave_packet_tlv_guide.md)
+  mmWave Data UART 中 `chunk`、`raw_capture`、`packet(frame)`、TLV 与点云帧的分层心智模型。
 - [collection-toml-authoring.md](collection-toml-authoring.md)
   RD collection profile TOML 编写说明书。
 - [collection-qc-guide.md](collection-qc-guide.md)
