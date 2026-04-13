@@ -19,6 +19,7 @@ from vassago.collection.rd import session as collection_session
 from vassago.collection.rd import ui as collection_ui
 from vassago.collection.rd.config import WindowRange
 from vassago.collection.rd.paths import resolve_repo_path
+from vassago.collection.rd import visualizer
 from vassago.firmware.mmwave import config as mmwave_config
 from vassago.firmware.mmwave.protocol import MmwavePacketParser
 from vassago.firmware.mmwave.protocol import SmokeTestSummary
@@ -37,6 +38,11 @@ try:
 except ImportError:  # pragma: no cover - POSIX terminals are the primary target.
     termios = None
     tty = None
+
+try:
+    import msvcrt
+except ImportError:
+    msvcrt = None
 
 type TerminalAttributes = (
     list[int | list[bytes | int]] | list[int | list[bytes]] | list[int | list[int]]
@@ -302,6 +308,9 @@ def capture_take(
 
     original_timeout = connection.timeout
     connection.timeout = _capture_poll_timeout(original_timeout)
+
+    vis_proc, vis_queue = visualizer.start_visualizer()
+
     try:
         with _MarkedWindowRecorder(
             capture_duration_s=attempt_plan.capture_window.end_s,
@@ -342,6 +351,11 @@ def capture_take(
                     chunk = connection.read(read_size)
                     if chunk:
                         raw_capture.extend(chunk)
+                        if vis_queue is not None:
+                            try:
+                                vis_queue.put_nowait(chunk)
+                            except Exception:
+                                pass
                     marker.poll(
                         elapsed_seconds=min(
                             attempt_plan.capture_window.end_s,
@@ -356,6 +370,8 @@ def capture_take(
             marked_window = marker.window
     finally:
         connection.timeout = original_timeout
+        if vis_proc is not None:
+            visualizer.stop_visualizer(vis_proc, vis_queue)
 
     console.print("capture_window ended")
     return TakeCaptureResult(
@@ -564,6 +580,11 @@ class _MarkedWindowRecorder:
 
     def __enter__(self) -> Self:
         """Switch stdin into cbreak mode when supported."""
+        if msvcrt is not None:
+            # On Windows, msvcrt handles non-blocking I/O directly.
+            self._stdin_fd = sys.stdin.fileno() if sys.stdin.isatty() else None
+            return self
+
         if termios is None or tty is None or not sys.stdin.isatty():
             return self
 
@@ -587,6 +608,9 @@ class _MarkedWindowRecorder:
         _traceback: object,
     ) -> None:
         """Restore the original terminal mode."""
+        if msvcrt is not None:
+            return
+
         if termios is None:
             return
 
@@ -622,14 +646,22 @@ class _MarkedWindowRecorder:
         if elapsed_seconds < self.target_window.start_s:
             return
 
-        ready, _, _ = select.select([sys.stdin], [], [], 0.0)
-        if not ready:
-            return
+        if msvcrt is not None:
+            if not msvcrt.kbhit():
+                return
+            try:
+                key = msvcrt.getch().decode("utf-8")
+            except UnicodeDecodeError:
+                return
+        else:
+            ready, _, _ = select.select([sys.stdin], [], [], 0.0)
+            if not ready:
+                return
 
-        try:
-            key = sys.stdin.read(1)
-        except OSError:
-            return
+            try:
+                key = sys.stdin.read(1)
+            except OSError:
+                return
 
         if not _matches_end_mark_key(key, self.end_mark_key):
             return
