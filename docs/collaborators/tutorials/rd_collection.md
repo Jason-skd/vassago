@@ -50,6 +50,7 @@ uv run vassago collection rd list-configs
 
 - 现在没有 `speed` 字段
 - `target_window` 不再在配置里写死起止时间
+- 当前默认 firmware cfg 是 `rd_pointcloud_dual`
 - 采集时你只需要关注倒计时、`GO` 和结束按键
 
 ## 3. 第一次创建 session
@@ -64,6 +65,7 @@ uv run vassago collection rd init-session
 
 - collection profile
 - `gesture`
+- firmware cfg
 - 串口
 - `subject_name`
 - `hand`
@@ -79,6 +81,7 @@ uv run vassago collection rd init-session
 
 - 交互模式下，`operator_name` 必须手动输入，不会自动带默认值
 - `gesture`、`environment` 不是自由输入，而是从 profile 里选择
+- firmware cfg 也会先给你一个受管 `config_id` 列表；当前 `rd_phase1_default` 默认高亮的是 `rd_pointcloud_dual`
 - session 创建成功后，会生成一个 `manifest.json`
 - `manifest.json` 顶层会直接写入本次 session 的公共字段，例如 `gesture`、`firmware_config_id`、`gesture_options`、`environment_options`、串口信息
 - `config_snapshot` 会同时保留本次生效 collection config 的完整镜像，供后续追溯和离线 QC 使用
@@ -98,6 +101,31 @@ uv run vassago collection rd init-session \
   --data-port /dev/ttyYYY \
   --no-interactive
 ```
+
+如果你想覆盖 profile 默认绑定的 firmware cfg，可以额外传：
+
+```bash
+--firmware-config-id rd_candidate
+```
+
+如果你希望 manifest 创建完就立刻开始采集，可以把上面的命令改成：
+
+```bash
+uv run vassago collection rd init-session \
+  --config-id rd_phase1_default \
+  --subject-name skd \
+  --gesture wave \
+  --environment office_lab \
+  --operator-name your_name \
+  --radar-id rd_aop_01 \
+  --firmware-id rd_phase1_uart \
+  --cli-port /dev/ttyXXX \
+  --data-port /dev/ttyYYY \
+  --no-interactive \
+  --run
+```
+
+如果你需要实验性的 live 点云可视化，可以在 `init-session --run` 或 `run-session` 后面再加 `--visualizer`。
 
 ## 4. 已有 session 怎么开始采集
 
@@ -119,6 +147,14 @@ uv run vassago collection rd run-session
 ```bash
 uv run vassago collection rd run-session \
   --manifest data/collection/rd/sessions/<session_id>/manifest.json
+```
+
+如果你要在采集时打开实验性的 live point-cloud visualizer，可以改成：
+
+```bash
+uv run vassago collection rd run-session \
+  --manifest data/collection/rd/sessions/<session_id>/manifest.json \
+  --visualizer
 ```
 
 如果你只是想先看看有哪些 session 可以恢复：

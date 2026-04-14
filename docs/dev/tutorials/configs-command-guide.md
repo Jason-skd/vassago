@@ -247,7 +247,7 @@ uv run vassago collection rd list-configs
 uv run vassago collection rd init-session \
   --config-id rd_phase1_default \
   --subject-name skd \
-  --gesture swipe_left \
+  --gesture wave \
   --environment office_lab \
   --operator-name your_name \
   --radar-id rd_aop_01 \

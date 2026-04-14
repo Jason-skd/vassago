@@ -15,12 +15,16 @@
 - 本地已经完成依赖安装；如未安装，先执行 `uv sync --dev`
 - 你知道本次要使用的 `cfg`
 
-当前仓库内置了两个可直接使用的 `cfg`：
+当前仓库目前有 3 个受管且可直接通过 `--config-id` 使用的 active `cfg`：
 
 - `baseline_pointcloud`
   推荐优先使用的低风险基线配置，对应 [../../../configs/firmware/mmwave/baseline_pointcloud.cfg](../../../configs/firmware/mmwave/baseline_pointcloud.cfg)
 - `rd_candidate`
   风险较高的候选配置，对应 [../../../configs/firmware/mmwave/rd_candidate.cfg](../../../configs/firmware/mmwave/rd_candidate.cfg)
+- `rd_pointcloud_dual`
+  风险较高的双输出配置，对应 [../../../configs/firmware/mmwave/rd_pointcloud_dual.cfg](../../../configs/firmware/mmwave/rd_pointcloud_dual.cfg)
+
+如果你只是要先确认板卡、固件和串口链路是否正常，仍然建议先从 `baseline_pointcloud` 开始。当前 RD collection 默认 profile 会绑定 `rd_pointcloud_dual`，但它不是 bring-up 的首选基线。
 
 ## 2. 推荐操作流程
 
@@ -95,7 +99,7 @@ uv run vassago firmware mmwave smoke-test
 
 此时程序会：
 
-- 展示仓库内置 `cfg` 供你选择
+- 展示当前所有 active 的受管 `cfg` 供你选择
 - 自动探测候选串口
 - 让你确认 CLI 口和 Data 口
 
