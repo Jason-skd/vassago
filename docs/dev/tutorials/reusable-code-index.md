@@ -123,15 +123,123 @@
 - `validate_all_configs()`
 - `run_config_discovery()`
 - `run_config_validation()`
+- `run_config_validation_context()`
 - `uv run vassago configs validate`
 
 它已经帮你串起：
 
-- metadata 解析
+- catalog discovery
 - duplicate `config_id` 检查
-- lifecycle 与目录位置一致性检查
-- mmWave cfg 语义校验
-- RD collection global/profile 语义校验
+- peer-style config checks 编排
+- 新增 mmWave cfg 时的 first-seen integrity 记录追加
+
+最重要的原则：
+
+- 需要“跑一整轮 configs 校验”时，优先扩展或复用这里的 orchestrator
+- 不要把 discovery、peer checks 和 CLI 渲染重新混写在一起
+
+### [src/vassago/configs/checks.py](../../../src/vassago/configs/checks.py)
+
+优先复用场景：
+
+- 需要给 `vassago configs validate` 增加一个新的 peer check
+- 需要单独调用 entry-location、semantics 或 mmWave integrity 检查
+- 需要把某个 kind-specific 校验接到统一 report 里
+
+优先复用的函数与常量：
+
+- `run_entry_location_check()`
+- `run_config_semantics_check()`
+- `run_mmwave_cfg_integrity_check()`
+- `DEFAULT_CONFIG_VALIDATION_CHECKS`
+
+它已经处理：
+
+- lifecycle 与目录角色一致性检查
+- header-only metadata key 泄漏到 TOML body 的错误
+- mmWave cfg 语义校验的 report 包装
+- RD collection global / profile loader 级校验
+- mmWave cfg integrity 检查接线
+
+不要再做的事：
+
+- 在 `validation.py`、`cli.py` 或测试里临时塞一段匿名校验逻辑当长期方案
+- 为了新增一个 configs 检查，就绕开统一 `ValidationContext` / `ValidationReport`
+
+### [src/vassago/configs/validation_contract.py](../../../src/vassago/configs/validation_contract.py)
+
+优先复用场景：
+
+- 需要定义新的 config validation plugin
+- 需要共享 configs 校验的 message / report / context 模型
+- 需要把多个 checks 的结果合并成一次稳定输出
+
+优先复用的类型与常量：
+
+- `ValidationMessage`
+- `ValidationReport`
+- `ValidationContext`
+- `ValidationRunResult`
+- `ConfigValidationCheck`
+- `merge_reports()`
+- `CONFIG_VALIDATION_PLUGIN_DISCOVERY`
+- `CONFIG_VALIDATION_PLUGIN_ENTRY_LOCATION`
+- `CONFIG_VALIDATION_PLUGIN_SEMANTICS`
+- `CONFIG_VALIDATION_PLUGIN_MMWAVE_INTEGRITY`
+
+最重要的原则：
+
+- 不要在新的 configs 检查器里再发明一套 message schema
+- plugin id、report 聚合和 error/warn 口径优先沿用这里
+
+### [src/vassago/configs/mmwave_cfg_integrity.py](../../../src/vassago/configs/mmwave_cfg_integrity.py)
+
+优先复用场景：
+
+- 需要读取或校验 mmWave cfg integrity registry
+- 需要为新加入的受管 cfg 追加 digest 记录
+- 需要计算 path-independent 的 cfg 内容 hash
+
+优先复用的函数与类型：
+
+- `load_mmwave_cfg_integrity_registry()`
+- `clear_mmwave_cfg_integrity_cache()`
+- `compute_mmwave_cfg_digest()`
+- `build_mmwave_cfg_integrity_records()`
+- `format_mmwave_cfg_integrity_registry()`
+- `append_missing_mmwave_cfg_integrity_records()`
+- `validate_mmwave_cfg_integrity()`
+- `MmwaveCfgIntegrityRecord`
+
+它已经处理：
+
+- cfg 文本规范化后的稳定 digest 计算
+- registry 结构校验
+- 缺项 / 未知 `config_id` / hash mismatch 检查
+- 只追加新 cfg 记录、不覆盖旧 hash
+
+不要再做的事：
+
+- 手写 `sha256` 比较逻辑
+- 为了“让检查过掉”直接覆盖既有 cfg 的 digest 基线
+- 在脚本里绕开 registry，临时认可受管 cfg 内容漂移
+
+### [src/vassago/configs/ui.py](../../../src/vassago/configs/ui.py)
+
+优先复用场景：
+
+- 需要渲染 configs catalog 表格
+- 需要以统一格式输出 config validation summary
+
+优先复用的函数：
+
+- `render_catalog_entries()`
+- `render_validation_report()`
+
+最重要的原则：
+
+- configs CLI handler 只做接线；表格和 summary 样式尽量复用这里
+- 不要在多个命令里各写一份 `result/errors/warnings` 文本输出
 
 ## 4. mmWave 固件、串口与 UART 复用面
 
@@ -428,6 +536,8 @@
 
 - `start_visualizer()`
 - `PointCloudVisualizerSession`
+- `PointCloudVisualizerSession.consume_packets()`
+- `PointCloudVisualizerSession.close()`
 
 最重要的原则：
 
@@ -579,7 +689,7 @@
 推荐优先参考：
 
 - [tests/test_configs.py](../../../tests/test_configs.py)
-  看 catalog 和全量 config 校验怎么调用。
+  看 catalog、peer check、自定义 validation report 和 integrity registry 怎么调用。
 - [tests/test_mmwave_smoke_test.py](../../../tests/test_mmwave_smoke_test.py)
   看 cfg 上传、端口角色推断和恢复提示怎么测。
 - [tests/test_mmwave_protocol.py](../../../tests/test_mmwave_protocol.py)
@@ -594,6 +704,8 @@
   看 metadata QC、offline quick-QC replay 和 `offline-qc` CLI 怎么用。
 - [tests/test_collection_cli.py](../../../tests/test_collection_cli.py)
   看 CLI 如何薄层接线到库层模块。
+- [tests/test_collection_visualizer.py](../../../tests/test_collection_visualizer.py)
+  看 visualizer packet consumer 怎样复用共享 parser 和点云 frame 解码。
 
 ## 8. 常见任务应该先复用什么
 
@@ -601,6 +713,12 @@
 
 - “按 `config_id` 找配置”
   先看 `configs.catalog`、`firmware.mmwave.config`、`collection.rd.config`
+- “给 `configs validate` 增加或拆分 peer check”
+  先看 `configs.validation`、`configs.checks`、`configs.validation_contract`
+- “校验或更新 mmWave cfg integrity registry”
+  先看 `configs.mmwave_cfg_integrity`
+- “渲染 configs catalog / summary”
+  先看 `configs.ui`
 - “读取或校验 mmWave cfg”
   先看 `firmware.mmwave.cfg`、`firmware.mmwave.config_validation`
 - “给板子重新下发 cfg”
