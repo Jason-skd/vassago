@@ -30,8 +30,8 @@
 
 - [tutorials/README.md](tutorials/README.md)
   稳定、可重复执行的开发规范与教程。
-- [tutorials/collection-qc-guide.md](tutorials/collection-qc-guide.md)
-  RD collection QC 的使用、结果解读和排障入口。
+- [../collaborators/tutorials/rd_collection_qc.md](../collaborators/tutorials/rd_collection_qc.md)
+  RD collection QC 实操说明，仅维护这一份使用文档。
 - [context/README.md](context/README.md)
   用户确认保留的关键调查、分析和决策留痕。
 

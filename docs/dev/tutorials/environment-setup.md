@@ -199,7 +199,7 @@ lefthook install
 - `uv run ruff check --fix {staged_files}`
 - `uv run pyright`
 - `uv run pytest --testmon || [ $? -eq 5 ]`
-- 对暂存区中的 `data/collection/rd/sessions/*/manifest.json` 逐个执行 `uv run vassago collection rd offline-qc --manifest <manifest>`
+- `uv run vassago collection rd offline-qc-all`
 - `uv run vassago configs validate`
 - `scc --ci src scripts docs`
 
@@ -207,7 +207,7 @@ lefthook install
 
 - 对暂存区中的 Python 文件做自动格式化
 - 对暂存区中的 Python 文件执行 lint，并自动修复可修复问题
-- 对暂存区中的 RD collection session manifest 做离线 QC，阻止带 `error` 的 session 数据被直接提交
+- 对 `data/collection/rd/sessions/` 下的全部 RD collection session manifest 做一次全量离线 QC，阻止带 `error` 的 session 数据被直接提交
 - 对配置注册表做一次全局一致性校验
 - 对整个项目执行一次 `pyright` 类型检查，确保命令行结果与 VS Code Pylance 基本对齐
 - 对整个项目调用一次 `pytest-testmon`，由 `testmon` 自己选择受改动影响的测试
@@ -226,7 +226,7 @@ lefthook run pre-commit
 
 如果当前没有已暂存的 Python 文件，命令会直接跳过对应步骤，这是正常现象。
 
-同理，如果当前没有已暂存的 RD session `manifest.json`，`offline-qc` 这一步也会自动跳过。
+如果当前 `data/collection/rd/sessions/` 下还没有任何 session `manifest.json`，`offline-qc-all` 会输出 `checked_manifests: 0` 并直接通过。
 
 ## 7. 验证开发环境
 

@@ -14,6 +14,7 @@ from vassago.collection.rd import config as collection_config
 from vassago.collection.rd import offline_qc as collection_offline_qc
 from vassago.collection.rd import session as collection_session
 from vassago.collection.rd import ui as collection_ui
+from vassago.collection.rd.paths import to_repo_relative_path
 from vassago.collection.rd.qc_contract import QC_SEVERITY_ERROR
 from vassago.collection.rd.qc_contract import QC_SEVERITY_INFO
 from vassago.collection.rd.qc_contract import QC_SEVERITY_WARN
@@ -34,6 +35,7 @@ def register_commands(app: typer.Typer) -> None:
     app.command("run-session")(handle_run_session)
     app.command("resume-session")(handle_run_session)
     app.command("offline-qc")(handle_offline_qc)
+    app.command("offline-qc-all")(handle_offline_qc_all)
 
 
 def handle_list_configs() -> None:
@@ -332,6 +334,21 @@ def handle_offline_qc(
     raise typer.Exit(code=1 if error_count else 0)
 
 
+def handle_offline_qc_all(
+    sessions_root: Annotated[
+        Path,
+        typer.Option(help="Directory scanned for collection session manifests."),
+    ] = collection_session.DEFAULT_SESSIONS_ROOT,
+) -> None:
+    """Run offline QC across every discovered persisted collection manifest."""
+    run_result = collection_offline_qc.run_offline_qc_all(sessions_root=sessions_root)
+    _render_offline_qc_run_result(
+        sessions_root=sessions_root,
+        run_result=run_result,
+    )
+    raise typer.Exit(code=1 if run_result.report.has_errors else 0)
+
+
 def _resolve_profile(
     *,
     config_path: Path | None,
@@ -371,7 +388,7 @@ def _render_offline_qc_report(*, manifest_path: Path, report: QcReport) -> None:
         result = "pass_with_warnings"
 
     console.print("Offline QC Summary")
-    console.print(f"manifest: {manifest_path}")
+    console.print(f"manifest: {to_repo_relative_path(manifest_path)}")
     console.print(f"result: {result}")
     console.print(f"errors: {error_count}")
     console.print(f"warnings: {warn_count}")
@@ -387,6 +404,41 @@ def _render_offline_qc_report(*, manifest_path: Path, report: QcReport) -> None:
         suffix = f" {' '.join(details)}" if details else ""
         console.print(f"{header}{suffix}")
         console.print(f"  {finding.message}")
+
+
+def _render_offline_qc_run_result(
+    *,
+    sessions_root: Path,
+    run_result: collection_offline_qc.OfflineQcRunResult,
+) -> None:
+    """Render one full-repository offline-QC run plus per-manifest details."""
+    report = run_result.report
+    error_count = len(report.findings_for(severity=QC_SEVERITY_ERROR))
+    warn_count = len(report.findings_for(severity=QC_SEVERITY_WARN))
+    info_count = len(report.findings_for(severity=QC_SEVERITY_INFO))
+    result = "fail" if error_count else "pass"
+    if warn_count and not error_count:
+        result = "pass_with_warnings"
+
+    console.print("Offline QC Validation Summary")
+    console.print(f"sessions_root: {to_repo_relative_path(sessions_root)}")
+    console.print(f"checked_manifests: {run_result.checked_manifest_count}")
+    console.print(f"result: {result}")
+    console.print(f"errors: {error_count}")
+    console.print(f"warnings: {warn_count}")
+    console.print(f"info: {info_count}")
+
+    if not run_result.manifest_results:
+        return
+
+    console.print()
+    for index, manifest_result in enumerate(run_result.manifest_results):
+        if index:
+            console.print()
+        _render_offline_qc_report(
+            manifest_path=manifest_result.manifest_path,
+            report=manifest_result.report,
+        )
 
 
 def _resolve_gesture(

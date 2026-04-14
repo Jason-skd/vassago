@@ -591,11 +591,13 @@
 优先复用场景：
 
 - 需要对一个 session manifest 跑完整离线 QC
+- 需要对整个 `data/collection/rd/sessions/` 树跑全量离线 QC
 - 需要把多个 peer checks 聚合为一个 `QcReport`
 - 需要对 accepted takes 重放 live `quick_qc`
 
 优先复用的函数与常量：
 
+- `run_offline_qc_all()`
 - `run_offline_qc()`
 - `run_offline_qc_context()`
 - `run_offline_quick_qc()`

@@ -22,7 +22,7 @@
 - 采集当下，先看 `quick QC`
 - 一轮 session 结束后，再跑 `offline-qc`
 
-如果你把 `data/collection/rd/sessions/<session_id>/manifest.json` 加入 Git 暂存区，仓库的 `pre-commit` 也会自动跑一次同样的 `offline-qc`。手动先跑一遍的意义，是更早发现问题。
+仓库的 `pre-commit` 会自动执行一次全量 `offline-qc-all`，扫描 `data/collection/rd/sessions/` 下的全部 session manifest。手动先跑一遍当前 session 的 `offline-qc`，意义是更早发现问题；手动跑一遍 `offline-qc-all`，则可以完整复现 hook 的检查口径。
 
 ## 2. 最短执行路径
 
@@ -36,7 +36,7 @@ data/collection/rd/sessions/<session_id>/
       raw_uart.bin
 ```
 
-然后直接运行：
+先检查当前这一个 session 时，直接运行：
 
 ```bash
 uv run vassago collection rd offline-qc --manifest data/collection/rd/sessions/<session_id>/manifest.json
@@ -47,9 +47,17 @@ uv run vassago collection rd offline-qc --manifest data/collection/rd/sessions/<
 - `manifest.json` 顶层字段和 `config_snapshot` 是否还符合约定
 - 所有 `accepted` take 的 `raw_uart.bin`、窗口信息和 quick-QC 结果是否还能离线重放通过
 
+如果你想在提交前完整复现仓库 hook 的行为，再运行：
+
+```bash
+uv run vassago collection rd offline-qc-all
+```
+
+这条命令会扫描 `data/collection/rd/sessions/*/manifest.json`，并先输出一个总览的 `Offline QC Validation Summary`，再按 manifest 逐个展开明细。
+
 ## 3. 输出结果怎么判断
 
-你最先看 `Offline QC Summary` 里的 `result`。
+单 session 命令先看 `Offline QC Summary` 里的 `result`；全量命令先看 `Offline QC Validation Summary` 里的 `result`。
 
 - `pass`
   当前没有 `error`，可以继续交接、提交或进入下一步处理。
@@ -111,7 +119,8 @@ uv run vassago collection rd offline-qc --manifest data/collection/rd/sessions/<
 
 ## 6. 推荐工作习惯
 
-- 每轮 session 结束后，手动跑一次 `offline-qc`
+- 每轮 session 结束后，先对当前 session 手动跑一次 `offline-qc`
+- 准备提交前，手动跑一次 `offline-qc-all`，确认和 `pre-commit` 一致
 - 准备提交 session manifest 前，再看一次 `Offline QC Summary`
 - 看到 `fail` 时，先保留现场，不要先删 `raw_uart.bin`
 - 不确定 warning 是否正常时，把完整输出一并发给维护者

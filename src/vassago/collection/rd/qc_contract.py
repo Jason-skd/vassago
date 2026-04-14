@@ -21,6 +21,7 @@ QC_SEVERITY_ERROR: QcSeverity = "error"
 QC_SEVERITY_WARN: QcSeverity = "warn"
 QC_SEVERITY_INFO: QcSeverity = "info"
 
+QC_PLUGIN_OFFLINE = "offline_qc"
 QC_PLUGIN_QUICK = "quick_qc"
 QC_PLUGIN_METADATA = "metadata_qc"
 QC_PLUGIN_AI_PRECHECK = "ai_precheck"

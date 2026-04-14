@@ -28,11 +28,7 @@ pre-commit:
         parallel: true
         jobs:
           - name: collection-offline-qc
-            glob: "data/collection/rd/sessions/*/manifest.json"
-            run: >-
-              sh -c 'for manifest in "$@"; do
-              uv run vassago collection rd offline-qc --manifest "$manifest" || exit 1;
-              done' sh {staged_files}
+            run: uv run vassago collection rd offline-qc-all
 
           - name: typecheck
             glob: "*.py"

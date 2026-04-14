@@ -10,6 +10,7 @@ from vassago.collection.rd import metadata_qc
 from vassago.collection.rd import offline_qc
 from vassago.collection.rd import quick_qc
 from vassago.collection.rd import session as collection_session
+from vassago.collection.rd.qc_contract import QC_PLUGIN_OFFLINE
 from vassago.collection.rd.qc_contract import QC_SEVERITY_ERROR
 from vassago.collection.rd.qc_contract import QC_SEVERITY_WARN
 from vassago.collection.rd.qc_contract import OfflineQcSessionContext
@@ -120,6 +121,57 @@ def test_run_offline_qc_surfaces_quick_qc_findings_per_take(tmp_path) -> None:
     )
 
 
+def test_run_offline_qc_all_returns_empty_report_when_sessions_root_is_missing(
+    tmp_path,
+) -> None:
+    run_result = offline_qc.run_offline_qc_all(sessions_root=tmp_path / "missing")
+
+    assert run_result.checked_manifest_count == 0
+    assert run_result.manifest_results == ()
+    assert run_result.report.findings == ()
+    assert run_result.report.has_errors is False
+
+
+def test_run_offline_qc_all_merges_reports_across_manifests(tmp_path) -> None:
+    _write_session_manifest(tmp_path, session_id="session_a")
+    manifest_path, manifest = _write_session_manifest(tmp_path, session_id="session_b")
+    manifest.pop("gesture_options")
+    collection_session.write_manifest(manifest_path=manifest_path, manifest=manifest)
+
+    run_result = offline_qc.run_offline_qc_all(sessions_root=tmp_path)
+
+    assert run_result.checked_manifest_count == 2
+    assert tuple(result.manifest_path for result in run_result.manifest_results) == (
+        tmp_path / "session_a" / "manifest.json",
+        tmp_path / "session_b" / "manifest.json",
+    )
+    assert tuple(
+        result.report.has_errors for result in run_result.manifest_results
+    ) == (
+        False,
+        True,
+    )
+    assert run_result.report.has_errors is True
+
+
+def test_run_offline_qc_all_surfaces_manifest_load_errors(tmp_path) -> None:
+    session_dir = tmp_path / "session_bad"
+    session_dir.mkdir()
+    manifest_path = session_dir / "manifest.json"
+    manifest_path.write_text("[]\n", encoding="utf-8")
+
+    run_result = offline_qc.run_offline_qc_all(sessions_root=tmp_path)
+
+    assert run_result.checked_manifest_count == 1
+    assert tuple(finding.plugin for finding in run_result.report.findings) == (
+        QC_PLUGIN_OFFLINE,
+    )
+    assert tuple(finding.code for finding in run_result.report.findings) == (
+        offline_qc.CODE_MANIFEST_LOAD_ERROR,
+    )
+    assert run_result.manifest_results[0].manifest_path == manifest_path
+
+
 def test_collection_offline_qc_command_returns_nonzero_on_errors(tmp_path) -> None:
     manifest_path, manifest = _write_manifest(tmp_path)
     manifest.pop("gesture_options")
@@ -139,6 +191,28 @@ def test_collection_offline_qc_command_returns_nonzero_on_errors(tmp_path) -> No
     assert result.exit_code == 1
     assert "Offline QC Summary" in result.output
     assert "errors: 1" in result.output
+
+
+def test_collection_offline_qc_all_command_returns_nonzero_on_errors(tmp_path) -> None:
+    _write_session_manifest(tmp_path, session_id="session_a")
+    manifest_path, manifest = _write_session_manifest(tmp_path, session_id="session_b")
+    manifest.pop("gesture_options")
+    collection_session.write_manifest(manifest_path=manifest_path, manifest=manifest)
+
+    result = runner.invoke(
+        app,
+        [
+            "collection",
+            "rd",
+            "offline-qc-all",
+            "--sessions-root",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Offline QC Validation Summary" in result.output
+    assert "checked_manifests: 2" in result.output
 
 
 def _write_manifest(
@@ -169,6 +243,22 @@ def _write_manifest(
     manifest_path = tmp_path / "manifest.json"
     collection_session.write_manifest(manifest_path=manifest_path, manifest=manifest)
     return manifest_path, manifest
+
+
+def _write_session_manifest(
+    sessions_root: Path,
+    *,
+    session_id: str,
+    raw_capture: bytes | None = None,
+    marked_window: dict[str, float] | None = None,
+) -> tuple[Path, dict[str, object]]:
+    session_dir = sessions_root / session_id
+    session_dir.mkdir(parents=True, exist_ok=False)
+    return _write_manifest(
+        session_dir,
+        raw_capture=raw_capture,
+        marked_window=marked_window,
+    )
 
 
 def _build_valid_manifest(

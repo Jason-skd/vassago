@@ -31,5 +31,5 @@
   mmWave Data UART 中 `chunk`、`raw_capture`、`packet(frame)`、TLV 与点云帧的分层心智模型。
 - [collection-toml-authoring.md](collection-toml-authoring.md)
   RD collection profile TOML 编写说明书。
-- [collection-qc-guide.md](collection-qc-guide.md)
-  RD collection 的 `quick_qc`、`metadata_qc`、`offline-qc` 使用与排障说明。
+
+RD collection QC 的使用说明只维护 collaborators 版本，见 [../../collaborators/tutorials/rd_collection_qc.md](../../collaborators/tutorials/rd_collection_qc.md)。

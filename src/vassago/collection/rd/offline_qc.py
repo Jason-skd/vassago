@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from dataclasses import replace
 from typing import TYPE_CHECKING
 from typing import TypeGuard
@@ -12,6 +13,7 @@ from vassago.collection.rd import quick_qc
 from vassago.collection.rd import session as collection_session
 from vassago.collection.rd.config import WindowRange
 from vassago.collection.rd.paths import resolve_repo_path
+from vassago.collection.rd.qc_contract import QC_PLUGIN_OFFLINE
 from vassago.collection.rd.qc_contract import QC_PLUGIN_QUICK
 from vassago.collection.rd.qc_contract import QC_SEVERITY_ERROR
 from vassago.collection.rd.qc_contract import OfflineQcCheck
@@ -27,8 +29,30 @@ if TYPE_CHECKING:
 
 type JsonObject = dict[str, object]
 
+CODE_MANIFEST_LOAD_ERROR = "manifest_load_error"
 CODE_MISSING_REPLAY_INPUT = "missing_replay_input"
 CODE_RAW_UART_NOT_FOUND = "raw_uart_artifact_not_found"
+
+
+@dataclass(slots=True, frozen=True)
+class OfflineQcManifestResult:
+    """One offline-QC result bound to one persisted session manifest."""
+
+    manifest_path: Path
+    report: QcReport
+
+
+@dataclass(slots=True, frozen=True)
+class OfflineQcRunResult:
+    """Aggregated full-repository offline-QC results."""
+
+    manifest_results: tuple[OfflineQcManifestResult, ...]
+    report: QcReport
+
+    @property
+    def checked_manifest_count(self) -> int:
+        """Return how many manifests were checked in this run."""
+        return len(self.manifest_results)
 
 
 def run_offline_qc(
@@ -45,6 +69,42 @@ def run_offline_qc(
             manifest=manifest,
         ),
         checks=checks,
+    )
+
+
+def run_offline_qc_all(
+    *,
+    sessions_root: str | Path = collection_session.DEFAULT_SESSIONS_ROOT,
+    checks: Sequence[OfflineQcCheck] | None = None,
+) -> OfflineQcRunResult:
+    """Run offline QC for every discovered session manifest under one root."""
+    manifest_results: list[OfflineQcManifestResult] = []
+    for manifest_path in _discover_manifest_paths(sessions_root=sessions_root):
+        try:
+            manifest = collection_session.load_manifest(manifest_path)
+        except Exception as exc:  # noqa: BLE001
+            report = QcReport.from_findings(
+                [_offline_error(CODE_MANIFEST_LOAD_ERROR, str(exc))]
+            )
+        else:
+            report = run_offline_qc_context(
+                context=OfflineQcSessionContext(
+                    manifest_path=manifest_path,
+                    manifest=manifest,
+                ),
+                checks=checks,
+            )
+        manifest_results.append(
+            OfflineQcManifestResult(
+                manifest_path=manifest_path,
+                report=report,
+            )
+        )
+
+    reports = tuple(result.report for result in manifest_results)
+    return OfflineQcRunResult(
+        manifest_results=tuple(manifest_results),
+        report=merge_reports(reports),
     )
 
 
@@ -214,10 +274,28 @@ def _take_id_or_none(take: JsonObject) -> str | None:
     return raw_take_id if isinstance(raw_take_id, str) and raw_take_id else None
 
 
+def _discover_manifest_paths(*, sessions_root: str | Path) -> tuple[Path, ...]:
+    resolved_sessions_root = resolve_repo_path(sessions_root)
+    if not resolved_sessions_root.exists():
+        return ()
+    return tuple(
+        sorted(resolved_sessions_root.glob(f"*/{collection_session.MANIFEST_FILENAME}"))
+    )
+
+
 def _with_take_id(finding: QcFinding, *, take_id: str | None) -> QcFinding:
     if take_id is None:
         return finding
     return replace(finding, take_id=take_id)
+
+
+def _offline_error(code: str, message: str) -> QcFinding:
+    return QcFinding(
+        plugin=QC_PLUGIN_OFFLINE,
+        severity=QC_SEVERITY_ERROR,
+        code=code,
+        message=message,
+    )
 
 
 def _quick_error(
