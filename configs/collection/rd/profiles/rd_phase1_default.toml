@@ -18,7 +18,7 @@ angle_deg = 180.0
 environment = "office_lab"
 radar_id = "rd_aop_01"
 firmware_id = "rd_phase1_uart"
-firmware_config_id = "rd_pointcloud_dual"
+firmware_config_id = "rd_candidate"
 
 [options]
 gestures = ["wave", "circle_cw", "flip"]
