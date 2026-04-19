@@ -39,4 +39,4 @@ pre-commit:
             run: uv run pytest --testmon || [ $? -eq 5 ]  # 5 是 pytest 在没有测试文件时返回的退出代码
 
           - name: code-stats
-            run: scc --ci src scripts docs
+            run: command -v scc >/dev/null 2>&1 && scc --ci src docs || true
