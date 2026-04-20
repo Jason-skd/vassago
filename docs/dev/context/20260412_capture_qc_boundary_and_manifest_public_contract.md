@@ -63,6 +63,13 @@
 - `metadata_qc`
 - 未来的 `ai_precheck_qc`
 
+补充（背景采后切片链路）：
+
+- 对背景连续采集（`normal_activity` / `white_space`）的“采后切片产物”，建议新增**特化的 offline QC 插件**覆盖：
+  - 产物（index/manifest 与 `rd.npz`）的一致性与可复现性
+  - `rd.npz` 的最小可用性与质量下限
+- 背景链路不要求复用 live `quick_qc` 的 marked_window gate
+
 ### 2. live collection 只接入 `quick_qc`
 
 当前 collection live 流只直接运行 `quick_qc`。
@@ -76,6 +83,11 @@
 - `metadata_qc`
   - 不进入 live operator gate
   - 仅属于 `offline_qc` runner 的 session-level checks
+
+进一步固定（背景链路的 QC 边界）：
+
+- 背景连续采集的 live 阶段不走逐 take accept/reject，不应依赖 marked_window
+- 背景采后切片阶段可直接产出 `rd.npz`，其质量门禁由 offline QC 承担
 
 ### 3. manifest 顶层是 downstream public contract
 
@@ -92,6 +104,16 @@ manifest 顶层不再只是“当前 session 的随手 metadata”。
 - downstream tooling 应优先读取 manifest 顶层和 take 顶层字段
 - `config_snapshot` 不是 extractor-facing contract
 - 若 extractor 需要某字段，则该字段必须在 manifest 顶层稳定暴露
+
+补充（背景采后切片的公共 contract）：
+
+- 若背景切片直接输出 `rd.npz`（不经 `raw_uart.bin`），则需要一份稳定的 index/manifest 作为下游公共 contract，至少包含：
+  - source 连续原始数据路径（例如 `background/background_raw_uart.bin`）
+  - `window_duration_s`
+  - `target_segment_count`
+  - `selection_seed`
+  - 选中窗口记录（window ranges）与对应 `rd.npz` 路径
+- 对背景 `rd.npz` 产物的 QC 应以该 index/manifest 为对照基准，而不是复用 take-level marked_window 口径
 
 ### 4. `config_snapshot` 负责一比一复制生效 config
 
@@ -145,6 +167,10 @@ manifest 顶层不再只是“当前 session 的随手 metadata”。
 - `data_port`
 - `data_baudrate`
 - `takes`
+
+说明（背景链路）：
+
+- 背景连续采集 session 未必存在 `takes`；若背景切片直接产出 `rd.npz`，建议以独立的 index/manifest 作为下游公共 contract，而不强制把背景样本伪装成 take 列表
 
 当前至少固定以下 take-level public contract：
 
@@ -302,6 +328,11 @@ manifest 顶层不再只是“当前 session 的随手 metadata”。
 - `quick_qc` 和 `metadata_qc` 的接口需要共享统一 finding/report 模型
 - 现有写死 repo profile 值的测试需要改成 stub-config 或结构性断言
 
+补充（背景切片直接产出 npz）：
+
+- offline QC 需要新增一个面向背景切片产物的插件（例如 `background_npz_qc`），覆盖 index/manifest 与 `rd.npz` 合法性
+- live `quick_qc` 不承担背景切片产物的质量门禁职责
+
 ## Next Actions
 
 1. 将当前 context 作为 `quick_qc` / `offline_qc` 并行开发的边界基准。
@@ -312,6 +343,7 @@ manifest 顶层不再只是“当前 session 的随手 metadata”。
 6. 将 `offline_qc` 命令接入 `.lefthook.yaml`。
 7. 调整 manifest 写入逻辑，使 `gesture_options`、`environment_options`、`batch_size` 满足当前契约。
 8. 将 collection 测试从“写死 repo sample config 的具体值”改为 stub-config 和结构性断言。
+9. 为背景采后切片产物定义 index/manifest 的公共 contract，并实现对应 offline QC 插件。
 
 ## Verification / Open Questions
 

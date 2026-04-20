@@ -53,6 +53,11 @@
 - 连续采集期间的原始数据应尽可能全量保留
 - 训练或后处理真正使用的 5 秒片段，应在采集后再随机选出
 
+近期进一步收敛了一个实现取舍，用于降低中间层转换与 QC 复杂度：
+
+- 背景采集的“采后随机切片”阶段，可以**直接产出下游可用的 `rd.npz`**（而不是先切成与手势采集同构的 `raw_uart.bin` 再转 npz）
+- 背景样本质量与切片正确性应由**特化的 offline QC** 覆盖，不再要求复用 live `quick_qc` 的 marked_window gate
+
 同时，用户进一步收紧了一条配置约束：
 
 - companion profile 不应新增 `segment_duration_s = 5.0` 之类字段
@@ -222,6 +227,11 @@
   - 从完整连续数据中随机选取指定数量的 5 秒窗口
   - 形成最终背景样本清单
 
+补充收敛（实现选择）：
+
+- 背景切片产物优先直接输出为 `rd.npz`（以及一份可复现的切片 index/manifest）
+- 仍应保留连续原始数据（`background_raw_uart.bin`），以支持复核、重切片与策略迭代
+
 这意味着：
 
 - 当前 `take` 模型不适合直接承载背景采集
@@ -303,6 +313,7 @@
 - `background_plan.planned_recording_duration_s`
 - `background_plan.selection_policy`
 - `background_plan.save_policy`
+- `background_plan.selection_seed`
 
 其中：
 
@@ -327,6 +338,16 @@
 
 - session manifest 或其派生产物中应记录 selection seed
 - 最终被选中的窗口范围也应形成显式记录
+
+进一步固定（直接 npz 产物）：
+
+- 采后切片应生成一份**切片 index/manifest**，至少记录：
+  - source 连续原始数据路径（例如 `background/background_raw_uart.bin`）
+  - `window_duration_s`
+  - `target_segment_count`
+  - `selection_seed`
+  - 每个切片的窗口范围（例如 `start_s/end_s` 或窗口序号）与对应的 `rd.npz` 路径
+- offline QC 应以该 index/manifest 作为主要对照物，校验可复现性与产物完整性
 
 这意味着：
 
@@ -417,6 +438,7 @@
 - `quick_qc`、`metadata_qc`、offline replay 与后续切片工具都要认识 `collection_type`
 - 背景切片时长的唯一配置源继续留在 `global.toml`
 - companion profile 将保持轻量，只管理背景采集的倍数与策略，不管理基础运行时窗口
+- 背景“采后切片”阶段可直接输出 `rd.npz`，并配套 index/manifest 与特化 offline QC
 
 ## Next Actions
 
@@ -430,10 +452,11 @@
    - `background_plan.*`
    - 连续原始数据路径与状态字段
 6. 设计 continuous background capture runtime，改为边录边落盘。
-7. 设计采后随机切片 contract，包括：
+7. 设计并实现采后随机切片 contract（推荐直接产出 `rd.npz`），包括：
    - selection seed
-   - selected window records
-   - 与完整原始数据的映射关系
+   - selected window records（index/manifest）
+   - 产物路径（`rd.npz`）与可复现校验口径
+8. 为背景切片新增特化 offline QC（面向 index/manifest 与 `rd.npz` 合法性/完整性）。
 
 ## Verification / Open Questions
 
@@ -452,3 +475,5 @@
 - base profile 是否只保留 `default_companion_profile_id`，还是同时支持 `allowed_companion_profile_ids`
 - background session 的顶层 `gesture` 字段是否继续承担训练标签角色，还是引入更明确的 background label 字段
 - continuous raw 数据最终是单文件落盘还是按 block/chunk 分段落盘
+- 背景切片 index/manifest 的具体文件名与目录落位（是否作为 derived artifact 单独目录）
+- 背景切片 offline QC 的最小必需字段集合（npz schema 与统计口径的下限）
