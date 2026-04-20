@@ -155,6 +155,14 @@ def run_session(
     resolved_manifest_path = resolve_repo_path(manifest_path)
     manifest = collection_session.load_manifest(resolved_manifest_path)
     session_id = _require_str(manifest, "session_id")
+    collection_type = _require_str(manifest, "collection_type")
+
+    if collection_type != collection_session.COLLECTION_TYPE_GESTURE:
+        msg = (
+            "Background collection runtime is not implemented yet for "
+            f"collection_type={collection_type!r}."
+        )
+        raise NotImplementedError(msg)
 
     if collection_session.count_remaining_takes(manifest) == 0:
         collection_session.update_session_status(

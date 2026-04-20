@@ -53,6 +53,13 @@ def test_catalog_discovers_repo_managed_configs() -> None:
     )
     assert (
         catalog.require_entry(
+            kind=ConfigKind.COLLECTION_RD_COMPANION_PROFILE,
+            config_id="rd_background_default",
+        ).path.name
+        == "rd_background_default.toml"
+    )
+    assert (
+        catalog.require_entry(
             kind=ConfigKind.MMWAVE_CFG,
             config_id="rd_candidate",
         ).path.name

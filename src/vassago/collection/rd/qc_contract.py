@@ -29,6 +29,7 @@ QC_PLUGIN_AI_PRECHECK = "ai_precheck"
 MANIFEST_TOP_LEVEL_EXTRACT_FIELDS = (
     "schema_version",
     "session_id",
+    "collection_type",
     "subject_name",
     "hand",
     "distance_m",
@@ -39,6 +40,8 @@ MANIFEST_TOP_LEVEL_EXTRACT_FIELDS = (
     "radar_id",
     "firmware_id",
     "firmware_config_id",
+    "companion_profile_id",
+    "background_plan",
     "gesture",
     "gesture_options",
     "environment_options",
@@ -49,6 +52,7 @@ MANIFEST_TOP_LEVEL_EXTRACT_FIELDS = (
 )
 
 MANIFEST_TOP_LEVEL_SELECTION_FIELDS = (
+    "collection_type",
     "hand",
     "distance_m",
     "angle_deg",
@@ -56,6 +60,7 @@ MANIFEST_TOP_LEVEL_SELECTION_FIELDS = (
     "radar_id",
     "firmware_id",
     "firmware_config_id",
+    "companion_profile_id",
     "gesture",
 )
 
@@ -104,6 +109,15 @@ MANIFEST_SNAPSHOT_COMPARISON_RULES = (
         rationale=(
             "firmware_config_id is the runtime-selected mmWave cfg, while the "
             "snapshot keeps the profile default baseline."
+        ),
+    ),
+    SnapshotComparisonRule(
+        top_level_field="companion_profile_id",
+        snapshot_path=("default_companion_profile_id",),
+        mismatch_severity=QC_SEVERITY_WARN,
+        rationale=(
+            "companion_profile_id is the session-level companion binding, while "
+            "the snapshot keeps the base profile default baseline."
         ),
     ),
     SnapshotComparisonRule(

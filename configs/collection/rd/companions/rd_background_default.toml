@@ -1,0 +1,15 @@
+# --- vassago:meta ---
+# config_kind = "collection_rd_companion_profile"
+# config_id = "rd_background_default"
+# label = "RD Background Default"
+# description = "Default background collection policy for RD gesture sessions."
+# lifecycle = "active"
+# ---
+schema_version = "collection_rd_companion_profile_v1"
+default_recording_duration_multiplier = 1.25
+
+[modes.normal_activity]
+sample_ratio = 3.0
+
+[modes.white_space]
+sample_ratio = 2.0

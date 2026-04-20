@@ -111,6 +111,11 @@ def _validate_entry_semantics(
             )
         elif entry.kind == ConfigKind.COLLECTION_RD_PROFILE:
             rd_config.load_collection_profile(entry.path, catalog=context.catalog)
+        elif entry.kind == ConfigKind.COLLECTION_RD_COMPANION_PROFILE:
+            rd_config.load_collection_companion_profile(
+                entry.path,
+                catalog=context.catalog,
+            )
     except Exception as exc:  # noqa: BLE001
         messages.append(
             ValidationMessage(

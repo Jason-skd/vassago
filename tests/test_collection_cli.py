@@ -29,6 +29,7 @@ def test_collection_list_configs_command_renders_sample_profile(
                 label="Short",
                 description="Short description",
                 global_config_id="rd_global_default",
+                default_companion_profile_id="rd_background_default",
                 batch_size=1,
                 defaults=collection_config.CollectionDefaults(
                     hand="right",
@@ -104,17 +105,22 @@ def test_collection_init_session_command_writes_manifest(tmp_path) -> None:
     assert result.exit_code == 0
     assert len(manifests) == 1
     assert "Collection Session Summary" in result.output
+    assert "collection_type" in result.output
     manifest = collection_session.load_manifest(manifests[0])
+    assert manifest["collection_type"] == collection_session.COLLECTION_TYPE_GESTURE
     assert manifest["gesture_options"] == list(profile.gestures)
     assert manifest["environment_options"] == list(profile.environments)
-    assert manifest["firmware_config_id"] == "rd_pointcloud_dual"
+    assert manifest["firmware_config_id"] == "rd_candidate"
+    assert manifest["companion_profile_id"] == "rd_background_default"
+    assert manifest["background_plan"] is None
     assert "config_id" not in manifest
     config_snapshot = manifest["config_snapshot"]
     assert isinstance(config_snapshot, dict)
     assert config_snapshot["batch_size"] == profile.batch_size
+    assert config_snapshot["default_companion_profile_id"] == "rd_background_default"
     defaults = config_snapshot["defaults"]
     assert isinstance(defaults, dict)
-    assert defaults["firmware_config_id"] == "rd_pointcloud_dual"
+    assert defaults["firmware_config_id"] == "rd_candidate"
 
 
 def test_collection_init_session_command_allows_firmware_cfg_override(tmp_path) -> None:

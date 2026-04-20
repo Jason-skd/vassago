@@ -49,6 +49,10 @@ def _is_optional_string(value: object) -> bool:
     return value is None or isinstance(value, str)
 
 
+def _is_optional_object(value: object) -> bool:
+    return value is None or isinstance(value, dict)
+
+
 def _is_optional_non_empty_str(value: object) -> bool:
     return value is None or _is_non_empty_string(value)
 
@@ -102,6 +106,10 @@ def _is_valid_hand(value: object) -> bool:
     return value in {"left", "right"}
 
 
+def _is_valid_collection_type(value: object) -> bool:
+    return value in collection_session.COLLECTION_TYPES
+
+
 def _is_optional_iso_timestamp(value: object) -> bool:
     if value is None:
         return True
@@ -131,6 +139,10 @@ def _is_window_object(value: object) -> bool:
 TOP_LEVEL_FIELD_SPECS: dict[str, FieldSpec] = {
     "schema_version": FieldSpec("non-empty string", _is_non_empty_string),
     "session_id": FieldSpec("non-empty string", _is_non_empty_string),
+    "collection_type": FieldSpec(
+        "'gesture', 'normal_activity', or 'white_space'",
+        _is_valid_collection_type,
+    ),
     "subject_name": FieldSpec("non-empty string", _is_non_empty_string),
     "hand": FieldSpec("'left' or 'right'", _is_valid_hand),
     "distance_m": FieldSpec("number or null", _is_optional_number),
@@ -141,6 +153,8 @@ TOP_LEVEL_FIELD_SPECS: dict[str, FieldSpec] = {
     "radar_id": FieldSpec("non-empty string", _is_non_empty_string),
     "firmware_id": FieldSpec("non-empty string", _is_non_empty_string),
     "firmware_config_id": FieldSpec("non-empty string", _is_non_empty_string),
+    "companion_profile_id": FieldSpec("non-empty string", _is_non_empty_string),
+    "background_plan": FieldSpec("object or null", _is_optional_object),
     "gesture": FieldSpec("non-empty string", _is_non_empty_string),
     "gesture_options": FieldSpec("non-empty string list", _is_non_empty_string_list),
     "environment_options": FieldSpec(
@@ -169,6 +183,10 @@ SNAPSHOT_FIELD_SPECS: dict[tuple[str, ...], FieldSpec] = {
     ("config_id",): FieldSpec("non-empty string", _is_non_empty_string),
     ("label",): FieldSpec("non-empty string", _is_non_empty_string),
     ("description",): FieldSpec("non-empty string", _is_non_empty_string),
+    ("default_companion_profile_id",): FieldSpec(
+        "non-empty string",
+        _is_non_empty_string,
+    ),
     ("batch_size",): FieldSpec("positive integer", _is_positive_int),
     ("global", "config_id"): FieldSpec("non-empty string", _is_non_empty_string),
     ("runtime", "capture_window_duration_s"): FieldSpec(

@@ -86,6 +86,28 @@ def test_run_metadata_qc_warns_on_firmware_config_id_default_drift(tmp_path) -> 
     ) == ("firmware_config_id",)
 
 
+def test_run_metadata_qc_accepts_legacy_manifest_after_loader_backfill(
+    tmp_path,
+) -> None:
+    manifest_path, manifest = _write_manifest(tmp_path)
+    manifest.pop("collection_type")
+    manifest.pop("companion_profile_id")
+    manifest.pop("background_plan")
+    config_snapshot = manifest["config_snapshot"]
+    assert isinstance(config_snapshot, dict)
+    config_snapshot["config_id"] = "rd_phase1_default"
+    config_snapshot.pop("default_companion_profile_id")
+    collection_session.write_manifest(manifest_path=manifest_path, manifest=manifest)
+
+    report = offline_qc.run_offline_qc(manifest_path=manifest_path)
+
+    assert not [
+        finding
+        for finding in report.findings
+        if finding.code == metadata_qc.CODE_MISSING_FIELD
+    ]
+
+
 def test_run_offline_qc_replays_quick_qc_for_valid_accepted_take(tmp_path) -> None:
     manifest_path, _manifest = _write_manifest(tmp_path)
 
@@ -269,6 +291,7 @@ def _build_valid_manifest(
     return {
         "schema_version": collection_session.SESSION_SCHEMA_VERSION,
         "session_id": "20260412_090000_alice_swipe_left",
+        "collection_type": collection_session.COLLECTION_TYPE_GESTURE,
         "subject_name": "alice",
         "hand": "right",
         "distance_m": 0.5,
@@ -279,6 +302,8 @@ def _build_valid_manifest(
         "radar_id": "radar_01",
         "firmware_id": "fw_01",
         "firmware_config_id": "stub_mmwave_cfg",
+        "companion_profile_id": "rd_background_default",
+        "background_plan": None,
         "gesture": "swipe_left",
         "gesture_options": ["swipe_left", "swipe_right"],
         "environment_options": ["office_lab", "hallway"],
@@ -308,6 +333,7 @@ def _build_valid_manifest(
             "config_id": "stub_profile",
             "label": "Stub profile",
             "description": "Stub manifest used for offline QC tests.",
+            "default_companion_profile_id": "rd_background_default",
             "batch_size": 1,
             "global": {
                 "config_id": "stub_global",

@@ -16,7 +16,8 @@ def test_get_collection_profile_loads_sample_config() -> None:
     assert profile.countdown_duration_s == 5.0
     assert profile.marked_window_end_grace_s == 0.25
     assert profile.end_mark_key == "space"
-    assert profile.default_firmware_config_id == "rd_pointcloud_dual"
+    assert profile.default_firmware_config_id == "rd_candidate"
+    assert profile.default_companion_profile_id == "rd_background_default"
     assert (
         profile.target_window_duration_for(gesture=first_gesture) == expected_duration
     )
@@ -37,16 +38,38 @@ def test_collection_profile_snapshot_carries_full_effective_config() -> None:
 
     assert snapshot["config_id"] == "rd_phase1_default"
     assert snapshot["batch_size"] == profile.batch_size
+    assert snapshot["default_companion_profile_id"] == "rd_background_default"
     assert snapshot["global"] == {"config_id": "rd_global_default"}
     defaults = snapshot["defaults"]
     assert isinstance(defaults, dict)
-    assert defaults["firmware_config_id"] == "rd_pointcloud_dual"
+    assert defaults["firmware_config_id"] == "rd_candidate"
     assert runtime["capture_window_duration_s"] == 5.0
     assert runtime["countdown_duration_s"] == 5.0
     assert serial["data_baudrate"] == 921_600
     assert (
         gesture_target_durations[first_duration.gesture]
         == first_duration.target_window_duration_s
+    )
+
+
+def test_get_collection_companion_profile_loads_sample_config() -> None:
+    profile = collection_config.get_collection_companion_profile(
+        "rd_background_default"
+    )
+
+    assert profile.config_id == "rd_background_default"
+    assert profile.default_recording_duration_multiplier == 1.25
+    assert (
+        profile.sample_ratio_for(
+            collection_type=collection_config.COLLECTION_TYPE_NORMAL_ACTIVITY
+        )
+        == 3.0
+    )
+    assert (
+        profile.sample_ratio_for(
+            collection_type=collection_config.COLLECTION_TYPE_WHITE_SPACE
+        )
+        == 2.0
     )
 
 
@@ -62,6 +85,7 @@ def test_collection_profile_rejects_legacy_firmware_section(tmp_path) -> None:
 # ---
 schema_version = "collection_rd_profile_v3"
 batch_size = 1
+default_companion_profile_id = "rd_background_default"
 
 [global]
 config_id = "rd_global_default"

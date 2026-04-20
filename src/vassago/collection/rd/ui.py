@@ -102,6 +102,7 @@ def render_session_summary(
     table.add_row("manifest", str(manifest_path))
     table.add_row("session_id", str(manifest["session_id"]))
     table.add_row("session_status", str(manifest["session_status"]))
+    table.add_row("collection_type", str(manifest.get("collection_type", "-")))
     table.add_row("subject_name", str(manifest["subject_name"]))
     table.add_row("gesture", str(manifest["gesture"]))
     config_snapshot = manifest.get("config_snapshot")
@@ -121,12 +122,17 @@ def render_session_summary(
             ):
                 default_firmware_config_id = raw_default_firmware_config_id
     raw_top_level_firmware_config_id = manifest.get("firmware_config_id")
+    raw_companion_profile_id = manifest.get("companion_profile_id")
+    companion_profile_id = "-"
+    if isinstance(raw_companion_profile_id, str) and raw_companion_profile_id:
+        companion_profile_id = raw_companion_profile_id
     if (
         isinstance(raw_top_level_firmware_config_id, str)
         and raw_top_level_firmware_config_id
     ):
         firmware_config_id = raw_top_level_firmware_config_id
     table.add_row("profile_config_id", profile_config_id)
+    table.add_row("companion_profile_id", companion_profile_id)
     table.add_row("default_firmware_config_id", default_firmware_config_id)
     table.add_row("firmware_config_id", firmware_config_id)
     table.add_row("cli_port", str(manifest["cli_port"]))

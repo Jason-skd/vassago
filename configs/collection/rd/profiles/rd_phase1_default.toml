@@ -7,6 +7,7 @@
 # ---
 schema_version = "collection_rd_profile_v3"
 batch_size = 80
+default_companion_profile_id = "rd_background_default"
 
 [global]
 config_id = "rd_global_default"

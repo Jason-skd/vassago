@@ -16,6 +16,7 @@ class ConfigKind(StrEnum):
 
     COLLECTION_RD_GLOBAL = "collection_rd_global"
     COLLECTION_RD_PROFILE = "collection_rd_profile"
+    COLLECTION_RD_COMPANION_PROFILE = "collection_rd_companion_profile"
     MMWAVE_CFG = "mmwave_cfg"
 
 

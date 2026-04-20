@@ -19,7 +19,8 @@ from vassago.configs.paths import resolve_repo_path
 if TYPE_CHECKING:
     from vassago.configs.models import ConfigMetadata
 
-CONFIG_SCHEMA_VERSION = "collection_rd_config_v5"
+CONFIG_SCHEMA_VERSION = "collection_rd_config_v6"
+COMPANION_PROFILE_SCHEMA_VERSION = "collection_rd_companion_profile_v1"
 DEFAULT_BATCH_SIZE = 20
 DEFAULT_CAPTURE_WINDOW_DURATION_SECONDS = 5.0
 DEFAULT_COUNTDOWN_DURATION_SECONDS = 5.0
@@ -28,6 +29,13 @@ DEFAULT_END_MARK_KEY = "space"
 DEFAULT_CLI_BAUDRATE = 115_200
 DEFAULT_DATA_BAUDRATE = 921_600
 DEFAULT_COLLECTION_PROFILES_ROOT = Path("configs/collection/rd/profiles")
+DEFAULT_COLLECTION_COMPANION_PROFILES_ROOT = Path("configs/collection/rd/companions")
+COLLECTION_TYPE_NORMAL_ACTIVITY = "normal_activity"
+COLLECTION_TYPE_WHITE_SPACE = "white_space"
+BACKGROUND_COLLECTION_TYPES = (
+    COLLECTION_TYPE_NORMAL_ACTIVITY,
+    COLLECTION_TYPE_WHITE_SPACE,
+)
 
 
 @dataclass(slots=True, frozen=True)
@@ -102,6 +110,54 @@ class GestureTargetDuration:
 
 
 @dataclass(slots=True, frozen=True)
+class CollectionCompanionMode:
+    """One background collection policy mode carried by a companion profile."""
+
+    collection_type: str
+    sample_ratio: float
+
+    def as_dict(self) -> dict[str, float]:
+        """Convert the mode to a JSON-ready mapping."""
+        return {
+            "sample_ratio": self.sample_ratio,
+        }
+
+
+@dataclass(slots=True, frozen=True)
+class CollectionCompanionProfile:
+    """Reusable background collection policy attached from a base profile."""
+
+    config_id: str
+    path: Path
+    label: str
+    description: str
+    default_recording_duration_multiplier: float
+    modes: tuple[CollectionCompanionMode, ...]
+
+    def as_snapshot(self) -> dict[str, object]:
+        """Build a JSON-ready snapshot for manifest provenance."""
+        return {
+            "schema_version": COMPANION_PROFILE_SCHEMA_VERSION,
+            "config_id": self.config_id,
+            "label": self.label,
+            "description": self.description,
+            "default_recording_duration_multiplier": (
+                self.default_recording_duration_multiplier
+            ),
+            "modes": {mode.collection_type: mode.as_dict() for mode in self.modes},
+        }
+
+    def sample_ratio_for(self, *, collection_type: str) -> float:
+        """Return the configured sample ratio for one background collection type."""
+        for mode in self.modes:
+            if mode.collection_type == collection_type:
+                return mode.sample_ratio
+
+        msg = f"Unknown background collection_type={collection_type!r}."
+        raise KeyError(msg)
+
+
+@dataclass(slots=True, frozen=True)
 class CollectionGlobalConfig:
     """Repository baseline for RD collection runtime defaults."""
 
@@ -125,6 +181,7 @@ class CollectionProfile:
     label: str
     description: str
     global_config_id: str
+    default_companion_profile_id: str
     batch_size: int
     defaults: CollectionDefaults
     serial: CollectionSerialDefaults
@@ -162,6 +219,7 @@ class CollectionProfile:
             "config_id": self.config_id,
             "label": self.label,
             "description": self.description,
+            "default_companion_profile_id": self.default_companion_profile_id,
             "batch_size": self.batch_size,
             "global": {
                 "config_id": self.global_config_id,
@@ -209,6 +267,31 @@ def list_collection_profiles(
     ]
 
 
+def list_collection_companion_profiles(
+    *,
+    configs_root: Path = DEFAULT_COLLECTION_COMPANION_PROFILES_ROOT,
+    catalog: ConfigCatalog | None = None,
+) -> list[CollectionCompanionProfile]:
+    """Return all active repository-managed collection companion profiles."""
+    if configs_root != DEFAULT_COLLECTION_COMPANION_PROFILES_ROOT:
+        companions_root = resolve_repo_path(configs_root)
+        if not companions_root.exists():
+            return []
+        return [
+            load_collection_companion_profile(path)
+            for path in sorted(companions_root.glob("*.toml"))
+        ]
+
+    resolved_catalog = catalog or load_catalog()
+    return [
+        load_collection_companion_profile(entry.path, catalog=resolved_catalog)
+        for entry in resolved_catalog.list_entries(
+            kind=ConfigKind.COLLECTION_RD_COMPANION_PROFILE,
+            lifecycle=ConfigLifecycle.ACTIVE,
+        )
+    ]
+
+
 def get_collection_profile(
     config_id: str,
     *,
@@ -234,6 +317,31 @@ def get_collection_profile(
     return load_collection_profile(entry.path, catalog=resolved_catalog)
 
 
+def get_collection_companion_profile(
+    config_id: str,
+    *,
+    configs_root: Path = DEFAULT_COLLECTION_COMPANION_PROFILES_ROOT,
+    catalog: ConfigCatalog | None = None,
+) -> CollectionCompanionProfile:
+    """Resolve one active collection companion profile by config id."""
+    if configs_root != DEFAULT_COLLECTION_COMPANION_PROFILES_ROOT:
+        for profile in list_collection_companion_profiles(configs_root=configs_root):
+            if profile.config_id == config_id:
+                return profile
+        msg = f"Unknown collection companion config id: {config_id}"
+        raise KeyError(msg)
+
+    resolved_catalog = catalog or load_catalog()
+    entry = resolved_catalog.require_entry(
+        kind=ConfigKind.COLLECTION_RD_COMPANION_PROFILE,
+        config_id=config_id,
+    )
+    if entry.lifecycle != ConfigLifecycle.ACTIVE:
+        msg = f"Collection companion profile {config_id!r} is not active."
+        raise KeyError(msg)
+    return load_collection_companion_profile(entry.path, catalog=resolved_catalog)
+
+
 def load_collection_profile(
     path: Path,
     *,
@@ -253,6 +361,11 @@ def load_collection_profile(
     global_config = load_collection_global_config_by_id(
         global_config_id,
         catalog=resolved_catalog,
+    )
+    default_companion_profile_id = _load_default_companion_profile_id(
+        data,
+        resolved_catalog=resolved_catalog,
+        resolved_path=resolved_path,
     )
     batch_size = _load_batch_size(data, resolved_path=resolved_path)
     defaults = _load_defaults(
@@ -303,6 +416,7 @@ def load_collection_profile(
         label=metadata.label,
         description=metadata.description,
         global_config_id=global_config_id,
+        default_companion_profile_id=default_companion_profile_id,
         batch_size=batch_size,
         defaults=defaults,
         serial=serial,
@@ -313,6 +427,38 @@ def load_collection_profile(
         countdown_duration_s=countdown_duration_s,
         marked_window_end_grace_s=marked_window_end_grace_s,
         end_mark_key=end_mark_key,
+    )
+
+
+def load_collection_companion_profile(
+    path: Path,
+    *,
+    catalog: ConfigCatalog | None = None,
+) -> CollectionCompanionProfile:
+    """Load and validate one RD collection companion profile from TOML."""
+    del catalog
+    resolved_path = resolve_repo_path(path)
+    metadata = _load_required_metadata(
+        resolved_path,
+        expected_kind=ConfigKind.COLLECTION_RD_COMPANION_PROFILE,
+    )
+    data = load_raw_toml(resolved_path)
+    _reject_header_only_keys(data, resolved_path=resolved_path)
+
+    default_recording_duration_multiplier = _load_positive_float(
+        data,
+        "default_recording_duration_multiplier",
+        default=1.0,
+        resolved_path=resolved_path,
+    )
+    modes = _load_companion_modes(data, resolved_path=resolved_path)
+    return CollectionCompanionProfile(
+        config_id=metadata.config_id,
+        path=resolved_path,
+        label=metadata.label,
+        description=metadata.description,
+        default_recording_duration_multiplier=default_recording_duration_multiplier,
+        modes=modes,
     )
 
 
@@ -440,6 +586,24 @@ def _load_batch_size(
         msg = f"batch_size must be positive in {resolved_path}"
         raise ValueError(msg)
     return batch_size
+
+
+def _load_default_companion_profile_id(
+    data: dict[str, Any],
+    *,
+    resolved_catalog: ConfigCatalog,
+    resolved_path: Path,
+) -> str:
+    if "default_companion_profile_id" not in data:
+        msg = f"default_companion_profile_id must be defined in {resolved_path}"
+        raise ValueError(msg)
+
+    config_id = _require_str(data, "default_companion_profile_id")
+    resolved_catalog.require_entry(
+        kind=ConfigKind.COLLECTION_RD_COMPANION_PROFILE,
+        config_id=config_id,
+    )
+    return config_id
 
 
 def _require_mmwave_config(
@@ -647,6 +811,39 @@ def _load_options(
         )
         raise ValueError(msg)
     return gestures, environments
+
+
+def _load_companion_modes(
+    data: dict[str, Any],
+    *,
+    resolved_path: Path,
+) -> tuple[CollectionCompanionMode, ...]:
+    modes_table = _require_table(data, "modes")
+    modes: list[CollectionCompanionMode] = []
+    for collection_type in BACKGROUND_COLLECTION_TYPES:
+        mode_table = _require_table(modes_table, collection_type)
+        modes.append(
+            CollectionCompanionMode(
+                collection_type=collection_type,
+                sample_ratio=_load_positive_float(
+                    mode_table,
+                    "sample_ratio",
+                    default=0.0,
+                    resolved_path=resolved_path,
+                ),
+            )
+        )
+
+    unexpected_modes = sorted(
+        key for key in modes_table if key not in BACKGROUND_COLLECTION_TYPES
+    )
+    if unexpected_modes:
+        msg = (
+            "modes contains unknown background collection types "
+            f"{unexpected_modes!r} in {resolved_path}"
+        )
+        raise ValueError(msg)
+    return tuple(modes)
 
 
 def _load_gesture_target_durations(

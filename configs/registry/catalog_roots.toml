@@ -13,5 +13,9 @@ kind = "collection_rd_profile"
 glob = "configs/collection/rd/profiles/*.toml"
 
 [[root]]
+kind = "collection_rd_companion_profile"
+glob = "configs/collection/rd/companions/*.toml"
+
+[[root]]
 kind = "collection_rd_profile"
 glob = "configs/collection/rd/templates/*.toml"

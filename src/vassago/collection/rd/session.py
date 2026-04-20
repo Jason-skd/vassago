@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from vassago.collection.rd import config as collection_config
 from vassago.collection.rd.paths import resolve_repo_path
 from vassago.collection.rd.paths import to_repo_relative_path
 
@@ -20,13 +21,21 @@ if TYPE_CHECKING:
 DEFAULT_SESSIONS_ROOT = Path("data/collection/rd/sessions")
 MANIFEST_FILENAME = "manifest.json"
 RAW_UART_FILENAME = "raw_uart.bin"
-SESSION_SCHEMA_VERSION = "collection_rd_session_v6"
+SESSION_SCHEMA_VERSION = "collection_rd_session_v7"
 SESSION_STATUS_PLANNED = "planned"
 SESSION_STATUS_IN_PROGRESS = "in_progress"
 SESSION_STATUS_COMPLETED = "completed"
 SESSION_STATUS_INTERRUPTED = "interrupted"
 TAKE_STATUS_PLANNED = "planned"
 TAKE_STATUS_ACCEPTED = "accepted"
+COLLECTION_TYPE_GESTURE = "gesture"
+COLLECTION_TYPE_NORMAL_ACTIVITY = "normal_activity"
+COLLECTION_TYPE_WHITE_SPACE = "white_space"
+COLLECTION_TYPES = (
+    COLLECTION_TYPE_GESTURE,
+    COLLECTION_TYPE_NORMAL_ACTIVITY,
+    COLLECTION_TYPE_WHITE_SPACE,
+)
 
 type JsonObject = dict[str, object]
 
@@ -50,6 +59,7 @@ class SessionInitInput:
     cli_port: str
     data_port: str
     data_baudrate: int
+    collection_type: str = COLLECTION_TYPE_GESTURE
 
 
 @dataclass(slots=True, frozen=True)
@@ -97,6 +107,7 @@ def build_session_manifest(
     """Build the initial manifest dictionary for one new session."""
     profile = session_input.profile
     created_at = now.isoformat()
+    collection_type = _require_collection_type(session_input.collection_type)
 
     return {
         "schema_version": SESSION_SCHEMA_VERSION,
@@ -108,6 +119,7 @@ def build_session_manifest(
         "created_at": created_at,
         "updated_at": created_at,
         "session_status": SESSION_STATUS_PLANNED,
+        "collection_type": collection_type,
         "subject_name": session_input.subject_name,
         "hand": session_input.hand,
         "distance_m": session_input.distance_m,
@@ -118,6 +130,8 @@ def build_session_manifest(
         "radar_id": session_input.radar_id,
         "firmware_id": session_input.firmware_id,
         "firmware_config_id": session_input.firmware_config_id,
+        "companion_profile_id": profile.default_companion_profile_id,
+        "background_plan": None,
         "gesture": session_input.gesture,
         "gesture_options": list(profile.gestures),
         "environment_options": list(profile.environments),
@@ -156,6 +170,7 @@ def load_manifest(manifest_path: Path) -> JsonObject:
     if not isinstance(data, dict):
         msg = f"Manifest root must be an object: {resolved_path}"
         raise TypeError(msg)
+    _backfill_legacy_manifest_fields(data)
     return data
 
 
@@ -318,3 +333,53 @@ def _require_str(data: JsonObject, key: str) -> str:
 
     msg = f"Manifest field {key!r} must be a string."
     raise ValueError(msg)
+
+
+def _require_collection_type(value: str) -> str:
+    """Validate that one session collection_type is supported."""
+    if value in COLLECTION_TYPES:
+        return value
+
+    msg = f"Unsupported collection_type: {value!r}"
+    raise ValueError(msg)
+
+
+def _backfill_legacy_manifest_fields(manifest: JsonObject) -> None:
+    """Backfill newly required contract fields for legacy persisted manifests."""
+    if "collection_type" not in manifest:
+        manifest["collection_type"] = COLLECTION_TYPE_GESTURE
+    if "background_plan" not in manifest:
+        manifest["background_plan"] = None
+
+    raw_snapshot = manifest.get("config_snapshot")
+    if not isinstance(raw_snapshot, dict):
+        return
+
+    default_companion_profile_id = _infer_default_companion_profile_id(raw_snapshot)
+    if default_companion_profile_id is None:
+        return
+
+    if "default_companion_profile_id" not in raw_snapshot:
+        raw_snapshot["default_companion_profile_id"] = default_companion_profile_id
+    if "companion_profile_id" not in manifest:
+        manifest["companion_profile_id"] = default_companion_profile_id
+
+
+def _infer_default_companion_profile_id(raw_snapshot: JsonObject) -> str | None:
+    """Infer the companion profile id for legacy manifests that predate the field."""
+    raw_default_companion_profile_id = raw_snapshot.get("default_companion_profile_id")
+    if (
+        isinstance(raw_default_companion_profile_id, str)
+        and raw_default_companion_profile_id
+    ):
+        return raw_default_companion_profile_id
+
+    raw_profile_config_id = raw_snapshot.get("config_id")
+    if not isinstance(raw_profile_config_id, str) or not raw_profile_config_id:
+        return None
+
+    try:
+        profile = collection_config.get_collection_profile(raw_profile_config_id)
+    except Exception:  # noqa: BLE001
+        return None
+    return profile.default_companion_profile_id

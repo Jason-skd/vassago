@@ -66,6 +66,15 @@ def handle_init_session(  # noqa: PLR0913
         str | None,
         typer.Option(help="Curated collection config id."),
     ] = None,
+    collection_type: Annotated[
+        str,
+        typer.Option(
+            help=(
+                "Session collection type. Background types are reserved in the "
+                "contract but not yet runnable."
+            ),
+        ),
+    ] = collection_session.COLLECTION_TYPE_GESTURE,
     subject_name: Annotated[
         str | None,
         typer.Option(help="Unique subject_name key for this session."),
@@ -157,6 +166,10 @@ def handle_init_session(  # noqa: PLR0913
         config_id=config_id,
         interactive=resolved_interactive,
     )
+    selected_collection_type = _resolve_collection_type(
+        collection_type=collection_type,
+        interactive=resolved_interactive,
+    )
     selected_gesture = _resolve_gesture(
         gesture=gesture,
         profile=profile,
@@ -234,6 +247,7 @@ def handle_init_session(  # noqa: PLR0913
         cli_port=selected_cli_port,
         data_port=selected_data_port,
         data_baudrate=data_baudrate or profile.serial.data_baudrate,
+        collection_type=selected_collection_type,
     )
     manifest_path, manifest = collection_session.initialize_session(
         session_input=session_input,
@@ -462,6 +476,22 @@ def _resolve_gesture(
 
     msg = "Pass --gesture or enable interactive mode."
     raise typer.BadParameter(msg)
+
+
+def _resolve_collection_type(
+    *,
+    collection_type: str,
+    interactive: bool,
+) -> str:
+    """Validate the reserved collection_type input for session init."""
+    del interactive
+    if collection_type != collection_session.COLLECTION_TYPE_GESTURE:
+        msg = (
+            "Background collection_type session init is not implemented yet; "
+            "use --collection-type gesture for now."
+        )
+        raise typer.BadParameter(msg)
+    return collection_type
 
 
 def _resolve_ports(
