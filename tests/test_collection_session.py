@@ -48,6 +48,7 @@ def test_initialize_session_persists_manifest_with_config_snapshot(tmp_path) -> 
     assert loaded_manifest["firmware_config_id"] == "rd_candidate"
     assert loaded_manifest["companion_profile_id"] == "rd_background_default"
     assert loaded_manifest["background_plan"] is None
+    assert loaded_manifest["background_capture"] is None
     assert loaded_manifest["gesture_options"] == list(profile.gestures)
     assert loaded_manifest["environment_options"] == list(profile.environments)
     assert len(takes) == profile.batch_size
@@ -119,6 +120,7 @@ def test_load_manifest_backfills_legacy_companion_contract(tmp_path) -> None:
     manifest.pop("collection_type")
     manifest.pop("companion_profile_id")
     manifest.pop("background_plan")
+    manifest.pop("background_capture")
     config_snapshot = manifest["config_snapshot"]
     assert isinstance(config_snapshot, dict)
     config_snapshot.pop("default_companion_profile_id")
@@ -132,5 +134,58 @@ def test_load_manifest_backfills_legacy_companion_contract(tmp_path) -> None:
     )
     assert loaded_manifest["companion_profile_id"] == "rd_background_default"
     assert loaded_manifest["background_plan"] is None
+    assert loaded_manifest["background_capture"] is None
     assert isinstance(loaded_snapshot, dict)
     assert loaded_snapshot["default_companion_profile_id"] == "rd_background_default"
+
+
+def test_initialize_background_session_persists_derived_plan(tmp_path) -> None:
+    profile = collection_config.get_collection_profile("rd_phase1_default")
+    manifest_path, manifest = collection_session.initialize_session(
+        session_input=collection_session.SessionInitInput(
+            profile=profile,
+            subject_name="alice",
+            hand="right",
+            distance_m=0.5,
+            angle_deg=0.0,
+            environment=profile.defaults.environment,
+            operator_name="operator_a",
+            note="background",
+            radar_id="radar_01",
+            firmware_id="fw_01",
+            gesture=profile.gestures[0],
+            firmware_config_id=profile.default_firmware_config_id,
+            cli_port="/dev/cli",
+            data_port="/dev/data",
+            data_baudrate=921_600,
+            collection_type=collection_session.COLLECTION_TYPE_NORMAL_ACTIVITY,
+        ),
+        sessions_root=tmp_path,
+    )
+
+    loaded_manifest = collection_session.load_manifest(manifest_path)
+    background_plan = loaded_manifest["background_plan"]
+    background_capture = loaded_manifest["background_capture"]
+    takes = loaded_manifest["takes"]
+
+    assert manifest["schema_version"] == collection_session.SESSION_SCHEMA_VERSION
+    assert (
+        loaded_manifest["collection_type"]
+        == collection_session.COLLECTION_TYPE_NORMAL_ACTIVITY
+    )
+    assert isinstance(background_plan, dict)
+    assert background_plan["sample_ratio"] == 3.0
+    assert background_plan["default_recording_duration_multiplier"] == 1.25
+    assert background_plan["window_duration_s"] == 5.0
+    assert background_plan["target_segment_count"] == profile.batch_size * 3
+    assert (
+        background_plan["planned_recording_duration_s"]
+        == profile.batch_size * 3 * 5.0 * 1.25
+    )
+    assert background_plan["selection_policy"] == "random_after_capture"
+    assert background_plan["save_policy"] == "keep_full_capture"
+    assert isinstance(background_plan["selection_seed"], int)
+    assert isinstance(background_capture, dict)
+    assert background_capture["status"] == "planned"
+    assert background_capture["raw_uart_path"] is None
+    assert takes == []

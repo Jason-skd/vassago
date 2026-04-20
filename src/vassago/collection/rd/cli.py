@@ -69,10 +69,7 @@ def handle_init_session(  # noqa: PLR0913
     collection_type: Annotated[
         str,
         typer.Option(
-            help=(
-                "Session collection type. Background types are reserved in the "
-                "contract but not yet runnable."
-            ),
+            help=("Session collection type: gesture, normal_activity, or white_space."),
         ),
     ] = collection_session.COLLECTION_TYPE_GESTURE,
     subject_name: Annotated[
@@ -483,14 +480,21 @@ def _resolve_collection_type(
     collection_type: str,
     interactive: bool,
 ) -> str:
-    """Validate the reserved collection_type input for session init."""
-    del interactive
-    if collection_type != collection_session.COLLECTION_TYPE_GESTURE:
+    """Resolve the collection_type from args or interactive selection."""
+    if collection_type not in collection_session.COLLECTION_TYPES:
         msg = (
-            "Background collection_type session init is not implemented yet; "
-            "use --collection-type gesture for now."
+            "collection_type must be one of: "
+            f"{', '.join(collection_session.COLLECTION_TYPES)}."
         )
         raise typer.BadParameter(msg)
+
+    if interactive and collection_type == collection_session.COLLECTION_TYPE_GESTURE:
+        return collection_ui.prompt_for_choice(
+            message="Choose collection type",
+            choices=collection_session.COLLECTION_TYPES,
+            default=collection_type,
+        )
+
     return collection_type
 
 

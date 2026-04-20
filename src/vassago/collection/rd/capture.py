@@ -11,6 +11,7 @@ from collections.abc import Callable
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+from typing import BinaryIO
 from typing import Self
 from typing import cast
 
@@ -109,6 +110,15 @@ class ReviewedTakeCapture:
     qc_decision: quick_qc.QuickQcDecision
 
 
+@dataclass(slots=True, frozen=True)
+class BackgroundCaptureResult:
+    """Persisted runtime outcome from one background continuous capture."""
+
+    raw_uart_path: Path
+    recording_duration_s: float
+    recorded_bytes: int
+
+
 type CaptureByteConsumer = Callable[[bytes], None]
 type CapturePacketConsumer = Callable[[tuple[MmwavePacket, ...]], None]
 
@@ -154,15 +164,32 @@ def run_session(
     """Run or resume one collection session until completion or interruption."""
     resolved_manifest_path = resolve_repo_path(manifest_path)
     manifest = collection_session.load_manifest(resolved_manifest_path)
-    session_id = _require_str(manifest, "session_id")
     collection_type = _require_str(manifest, "collection_type")
 
-    if collection_type != collection_session.COLLECTION_TYPE_GESTURE:
-        msg = (
-            "Background collection runtime is not implemented yet for "
-            f"collection_type={collection_type!r}."
+    if collection_type == collection_session.COLLECTION_TYPE_GESTURE:
+        return _run_gesture_session(
+            manifest_path=resolved_manifest_path,
+            manifest=manifest,
+            read_size=read_size,
+            enable_visualizer=enable_visualizer,
         )
-        raise NotImplementedError(msg)
+
+    return _run_background_session(
+        manifest_path=resolved_manifest_path,
+        manifest=manifest,
+        read_size=read_size,
+    )
+
+
+def _run_gesture_session(
+    *,
+    manifest_path: Path,
+    manifest: collection_session.JsonObject,
+    read_size: int,
+    enable_visualizer: bool,
+) -> RunSessionSummary:
+    """Run one gesture collection session until completion or interruption."""
+    session_id = _require_str(manifest, "session_id")
 
     if collection_session.count_remaining_takes(manifest) == 0:
         collection_session.update_session_status(
@@ -170,11 +197,11 @@ def run_session(
             status=collection_session.SESSION_STATUS_COMPLETED,
         )
         collection_session.write_manifest(
-            manifest_path=resolved_manifest_path,
+            manifest_path=manifest_path,
             manifest=manifest,
         )
         return build_run_summary(
-            manifest_path=resolved_manifest_path,
+            manifest_path=manifest_path,
             manifest=manifest,
         )
 
@@ -183,14 +210,14 @@ def run_session(
         status=collection_session.SESSION_STATUS_IN_PROGRESS,
     )
     collection_session.write_manifest(
-        manifest_path=resolved_manifest_path,
+        manifest_path=manifest_path,
         manifest=manifest,
     )
 
     try:
         _configure_radar(manifest)
         _run_take_loop(
-            manifest_path=resolved_manifest_path,
+            manifest_path=manifest_path,
             manifest=manifest,
             read_size=read_size,
             enable_visualizer=enable_visualizer,
@@ -201,7 +228,7 @@ def run_session(
             status=collection_session.SESSION_STATUS_INTERRUPTED,
         )
         collection_session.write_manifest(
-            manifest_path=resolved_manifest_path,
+            manifest_path=manifest_path,
             manifest=manifest,
         )
         raise
@@ -213,12 +240,90 @@ def run_session(
     )
     collection_session.update_session_status(manifest, status=final_status)
     collection_session.write_manifest(
-        manifest_path=resolved_manifest_path,
+        manifest_path=manifest_path,
         manifest=manifest,
     )
     console.print(f"Collection session stopped: {session_id} ({final_status})")
     return build_run_summary(
-        manifest_path=resolved_manifest_path,
+        manifest_path=manifest_path,
+        manifest=manifest,
+    )
+
+
+def _run_background_session(
+    *,
+    manifest_path: Path,
+    manifest: collection_session.JsonObject,
+    read_size: int,
+) -> RunSessionSummary:
+    """Run one background collection session with continuous raw capture."""
+    session_id = _require_str(manifest, "session_id")
+    background_capture = _require_dict(manifest, "background_capture")
+    if (
+        _require_str(background_capture, "status")
+        == collection_session.BACKGROUND_CAPTURE_STATUS_COMPLETED
+    ):
+        collection_session.update_session_status(
+            manifest,
+            status=collection_session.SESSION_STATUS_COMPLETED,
+        )
+        collection_session.write_manifest(
+            manifest_path=manifest_path,
+            manifest=manifest,
+        )
+        return build_run_summary(
+            manifest_path=manifest_path,
+            manifest=manifest,
+        )
+
+    collection_session.update_session_status(
+        manifest,
+        status=collection_session.SESSION_STATUS_IN_PROGRESS,
+    )
+    collection_session.write_manifest(
+        manifest_path=manifest_path,
+        manifest=manifest,
+    )
+
+    try:
+        _configure_radar(manifest)
+        capture_result = _capture_background_session(
+            manifest_path=manifest_path,
+            manifest=manifest,
+            read_size=read_size,
+        )
+    except BaseException:
+        collection_session.update_session_status(
+            manifest,
+            status=collection_session.SESSION_STATUS_INTERRUPTED,
+        )
+        collection_session.write_manifest(
+            manifest_path=manifest_path,
+            manifest=manifest,
+        )
+        raise
+
+    collection_session.complete_background_capture(
+        manifest=manifest,
+        recording_duration_s=capture_result.recording_duration_s,
+        recorded_bytes=capture_result.recorded_bytes,
+    )
+    collection_session.update_session_status(
+        manifest,
+        status=collection_session.SESSION_STATUS_COMPLETED,
+    )
+    collection_session.write_manifest(
+        manifest_path=manifest_path,
+        manifest=manifest,
+    )
+    collection_ui.render_background_capture_summary(
+        console,
+        recording_duration_s=capture_result.recording_duration_s,
+        recorded_bytes=capture_result.recorded_bytes,
+    )
+    console.print(f"Collection session stopped: {session_id} (completed)")
+    return build_run_summary(
+        manifest_path=manifest_path,
         manifest=manifest,
     )
 
@@ -332,6 +437,111 @@ def _run_take_loop(
                 manifest_path=manifest_path,
                 manifest=manifest,
             )
+
+
+def _capture_background_session(
+    *,
+    manifest_path: Path,
+    manifest: collection_session.JsonObject,
+    read_size: int,
+) -> BackgroundCaptureResult:
+    """Capture one long background recording directly to disk."""
+    background_plan = _require_dict(manifest, "background_plan")
+    collection_type = _require_str(manifest, "collection_type")
+    planned_recording_duration_s = _require_float(
+        background_plan,
+        "planned_recording_duration_s",
+    )
+    target_segment_count = _require_int(background_plan, "target_segment_count")
+    sample_ratio = _require_float(background_plan, "sample_ratio")
+    data_port = _require_str(manifest, "data_port")
+    data_baudrate = _require_int(manifest, "data_baudrate")
+    raw_uart_path = collection_session.build_background_output_path(
+        manifest_path=manifest_path,
+    )
+    started_at = collection_session.local_now()
+
+    collection_ui.render_background_capture_state(
+        console,
+        collection_type=collection_type,
+        planned_recording_duration_s=planned_recording_duration_s,
+        target_segment_count=target_segment_count,
+        sample_ratio=sample_ratio,
+    )
+    collection_session.mark_background_capture_started(
+        manifest=manifest,
+        raw_uart_path=raw_uart_path,
+        started_at=started_at,
+    )
+    collection_session.write_manifest(
+        manifest_path=manifest_path,
+        manifest=manifest,
+    )
+
+    recorded_bytes = 0
+    started_at_perf = time.perf_counter()
+    try:
+        with serial.Serial(
+            port=data_port,
+            baudrate=data_baudrate,
+            timeout=DEFAULT_READ_TIMEOUT_SECONDS,
+        ) as connection:
+            time.sleep(DEFAULT_READ_TIMEOUT_SECONDS)
+            connection.reset_input_buffer()
+            original_timeout = connection.timeout
+            connection.timeout = _capture_poll_timeout(original_timeout)
+            try:
+                with raw_uart_path.open("wb") as raw_output:
+                    recorded_bytes = _stream_background_capture(
+                        connection,
+                        recording_duration_s=planned_recording_duration_s,
+                        read_size=read_size,
+                        raw_output=raw_output,
+                    )
+            finally:
+                connection.timeout = original_timeout
+    except BaseException:
+        collection_session.interrupt_background_capture(
+            manifest=manifest,
+            recording_duration_s=max(0.0, time.perf_counter() - started_at_perf),
+            recorded_bytes=recorded_bytes,
+        )
+        collection_session.write_manifest(
+            manifest_path=manifest_path,
+            manifest=manifest,
+        )
+        raise
+
+    return BackgroundCaptureResult(
+        raw_uart_path=raw_uart_path,
+        recording_duration_s=max(0.0, time.perf_counter() - started_at_perf),
+        recorded_bytes=recorded_bytes,
+    )
+
+
+def _stream_background_capture(
+    connection: serial.Serial,
+    *,
+    recording_duration_s: float,
+    read_size: int,
+    raw_output: BinaryIO,
+) -> int:
+    """Stream background UART bytes straight to disk until the deadline."""
+    recorded_bytes = 0
+    capture_end_at = time.perf_counter() + recording_duration_s
+    while time.perf_counter() < capture_end_at:
+        chunk = connection.read(read_size)
+        if not chunk:
+            continue
+        raw_output.write(chunk)
+        recorded_bytes += len(chunk)
+
+    trailing_bytes = read_available_bytes(connection, read_size=read_size)
+    if trailing_bytes:
+        raw_output.write(trailing_bytes)
+        recorded_bytes += len(trailing_bytes)
+
+    return recorded_bytes
 
 
 def review_capture_take(

@@ -31,6 +31,7 @@ CODE_INVALID_FIELD = "invalid_field_value"
 CODE_TAKE_COUNT_MISMATCH = "take_count_mismatch"
 CODE_SNAPSHOT_MISMATCH = "top_level_snapshot_mismatch"
 CODE_MEMBERSHIP_VIOLATION = "top_level_membership_violation"
+CODE_BRANCH_CONTRACT_VIOLATION = "collection_type_branch_violation"
 
 
 @dataclass(slots=True, frozen=True)
@@ -63,6 +64,10 @@ def _is_optional_number(value: object) -> bool:
 
 def _is_positive_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _is_non_negative_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
 def _is_number(value: object) -> TypeGuard[int | float]:
@@ -136,6 +141,10 @@ def _is_window_object(value: object) -> bool:
     return end_s >= start_s
 
 
+def _is_valid_background_capture_status(value: object) -> bool:
+    return value in collection_session.BACKGROUND_CAPTURE_STATUSES
+
+
 TOP_LEVEL_FIELD_SPECS: dict[str, FieldSpec] = {
     "schema_version": FieldSpec("non-empty string", _is_non_empty_string),
     "session_id": FieldSpec("non-empty string", _is_non_empty_string),
@@ -155,6 +164,7 @@ TOP_LEVEL_FIELD_SPECS: dict[str, FieldSpec] = {
     "firmware_config_id": FieldSpec("non-empty string", _is_non_empty_string),
     "companion_profile_id": FieldSpec("non-empty string", _is_non_empty_string),
     "background_plan": FieldSpec("object or null", _is_optional_object),
+    "background_capture": FieldSpec("object or null", _is_optional_object),
     "gesture": FieldSpec("non-empty string", _is_non_empty_string),
     "gesture_options": FieldSpec("non-empty string list", _is_non_empty_string_list),
     "environment_options": FieldSpec(
@@ -235,6 +245,7 @@ def run_metadata_qc(context: OfflineQcSessionContext) -> QcReport:
     manifest = context.manifest
     findings = [
         *_check_top_level_contract(manifest),
+        *_check_collection_type_branch_contract(manifest),
         *_check_take_contract(manifest),
         *_check_snapshot_contract(manifest),
         *_check_take_count_matches_snapshot(manifest),
@@ -380,6 +391,9 @@ def _check_snapshot_contract(manifest: JsonObject) -> list[QcFinding]:
 
 
 def _check_take_count_matches_snapshot(manifest: JsonObject) -> list[QcFinding]:
+    if manifest.get("collection_type") != collection_session.COLLECTION_TYPE_GESTURE:
+        return []
+
     raw_takes = manifest.get("takes")
     raw_snapshot = manifest.get("config_snapshot")
     if not isinstance(raw_takes, list) or not isinstance(raw_snapshot, dict):
@@ -398,6 +412,232 @@ def _check_take_count_matches_snapshot(manifest: JsonObject) -> list[QcFinding]:
             field_path="takes",
         )
     ]
+
+
+def _check_collection_type_branch_contract(manifest: JsonObject) -> list[QcFinding]:
+    """Validate the fields that diverge between gesture and background sessions."""
+    collection_type = manifest.get("collection_type")
+    if collection_type == collection_session.COLLECTION_TYPE_GESTURE:
+        return _check_gesture_branch_contract(manifest)
+    if collection_type in {
+        collection_session.COLLECTION_TYPE_NORMAL_ACTIVITY,
+        collection_session.COLLECTION_TYPE_WHITE_SPACE,
+    }:
+        return _check_background_branch_contract(manifest)
+    return []
+
+
+def _check_gesture_branch_contract(manifest: JsonObject) -> list[QcFinding]:
+    findings: list[QcFinding] = []
+    if manifest.get("background_plan") is not None:
+        findings.append(
+            _error(
+                CODE_BRANCH_CONTRACT_VIOLATION,
+                "gesture sessions must keep background_plan set to null.",
+                field_path="background_plan",
+            )
+        )
+    if manifest.get("background_capture") is not None:
+        findings.append(
+            _error(
+                CODE_BRANCH_CONTRACT_VIOLATION,
+                "gesture sessions must keep background_capture set to null.",
+                field_path="background_capture",
+            )
+        )
+    return findings
+
+
+def _check_background_branch_contract(manifest: JsonObject) -> list[QcFinding]:
+    findings: list[QcFinding] = []
+    raw_takes = manifest.get("takes")
+    if isinstance(raw_takes, list) and raw_takes:
+        findings.append(
+            _error(
+                CODE_BRANCH_CONTRACT_VIOLATION,
+                "background sessions must keep takes empty.",
+                field_path="takes",
+            )
+        )
+
+    raw_background_plan = manifest.get("background_plan")
+    if not isinstance(raw_background_plan, dict):
+        findings.append(
+            _error(
+                CODE_BRANCH_CONTRACT_VIOLATION,
+                "background sessions require a background_plan object.",
+                field_path="background_plan",
+            )
+        )
+    else:
+        findings.extend(_check_background_plan_contract(raw_background_plan))
+
+    raw_background_capture = manifest.get("background_capture")
+    if not isinstance(raw_background_capture, dict):
+        findings.append(
+            _error(
+                CODE_BRANCH_CONTRACT_VIOLATION,
+                "background sessions require a background_capture object.",
+                field_path="background_capture",
+            )
+        )
+    else:
+        findings.extend(_check_background_capture_contract(raw_background_capture))
+
+    return findings
+
+
+def _check_background_plan_contract(background_plan: JsonObject) -> list[QcFinding]:
+    findings: list[QcFinding] = []
+    field_specs = {
+        "sample_ratio": FieldSpec("positive number", _is_positive_number),
+        "default_recording_duration_multiplier": FieldSpec(
+            "positive number",
+            _is_positive_number,
+        ),
+        "window_duration_s": FieldSpec("positive number", _is_positive_number),
+        "target_segment_count": FieldSpec("positive integer", _is_positive_int),
+        "planned_recording_duration_s": FieldSpec(
+            "positive number",
+            _is_positive_number,
+        ),
+        "selection_policy": FieldSpec("non-empty string", _is_non_empty_string),
+        "save_policy": FieldSpec("non-empty string", _is_non_empty_string),
+        "selection_seed": FieldSpec("non-negative integer", _is_non_negative_int),
+    }
+    for field_name, spec in field_specs.items():
+        field_path = f"background_plan.{field_name}"
+        if field_name not in background_plan:
+            findings.append(
+                _error(
+                    CODE_MISSING_FIELD,
+                    f"background_plan is missing required field {field_name!r}.",
+                    field_path=field_path,
+                )
+            )
+            continue
+        if not spec.validator(background_plan[field_name]):
+            findings.append(
+                _error(
+                    CODE_INVALID_FIELD,
+                    f"{field_path} must be {spec.expected}.",
+                    field_path=field_path,
+                )
+            )
+    return findings
+
+
+def _check_background_capture_contract(
+    background_capture: JsonObject,
+) -> list[QcFinding]:
+    findings: list[QcFinding] = []
+    field_specs = {
+        "status": FieldSpec(
+            ("'planned', 'in_progress', 'completed', or 'interrupted'"),
+            _is_valid_background_capture_status,
+        ),
+        "raw_uart_path": FieldSpec(
+            "non-empty string or null", _is_optional_non_empty_str
+        ),
+        "started_at": FieldSpec("ISO timestamp or null", _is_optional_iso_timestamp),
+        "completed_at": FieldSpec("ISO timestamp or null", _is_optional_iso_timestamp),
+        "interrupted_at": FieldSpec(
+            "ISO timestamp or null",
+            _is_optional_iso_timestamp,
+        ),
+        "recording_duration_s": FieldSpec(
+            "number or null",
+            _is_optional_number,
+        ),
+        "recorded_bytes": FieldSpec(
+            "non-negative integer or null",
+            lambda value: value is None or _is_non_negative_int(value),
+        ),
+    }
+    for field_name, spec in field_specs.items():
+        field_path = f"background_capture.{field_name}"
+        if field_name not in background_capture:
+            findings.append(
+                _error(
+                    CODE_MISSING_FIELD,
+                    f"background_capture is missing required field {field_name!r}.",
+                    field_path=field_path,
+                )
+            )
+            continue
+        if not spec.validator(background_capture[field_name]):
+            findings.append(
+                _error(
+                    CODE_INVALID_FIELD,
+                    f"{field_path} must be {spec.expected}.",
+                    field_path=field_path,
+                )
+            )
+
+    raw_status = background_capture.get("status")
+    if raw_status == collection_session.BACKGROUND_CAPTURE_STATUS_COMPLETED:
+        findings.extend(
+            _check_background_capture_terminal_fields(
+                background_capture,
+                timestamp_field="completed_at",
+            )
+        )
+    if raw_status == collection_session.BACKGROUND_CAPTURE_STATUS_INTERRUPTED:
+        findings.extend(
+            _check_background_capture_terminal_fields(
+                background_capture,
+                timestamp_field="interrupted_at",
+            )
+        )
+    if raw_status == collection_session.BACKGROUND_CAPTURE_STATUS_IN_PROGRESS:
+        findings.extend(
+            _check_background_capture_in_progress_fields(background_capture)
+        )
+    return findings
+
+
+def _check_background_capture_terminal_fields(
+    background_capture: JsonObject,
+    *,
+    timestamp_field: str,
+) -> list[QcFinding]:
+    findings: list[QcFinding] = []
+    for field_name in (
+        "raw_uart_path",
+        timestamp_field,
+        "recording_duration_s",
+        "recorded_bytes",
+    ):
+        field_path = f"background_capture.{field_name}"
+        if background_capture.get(field_name) is None:
+            findings.append(
+                _error(
+                    CODE_INVALID_FIELD,
+                    f"{field_path} must not be null for terminal background captures.",
+                    field_path=field_path,
+                )
+            )
+    return findings
+
+
+def _check_background_capture_in_progress_fields(
+    background_capture: JsonObject,
+) -> list[QcFinding]:
+    findings: list[QcFinding] = []
+    for field_name in ("raw_uart_path", "started_at"):
+        field_path = f"background_capture.{field_name}"
+        if background_capture.get(field_name) is None:
+            findings.append(
+                _error(
+                    CODE_INVALID_FIELD,
+                    (
+                        f"{field_path} must not be null while background "
+                        "capture is in progress."
+                    ),
+                    field_path=field_path,
+                )
+            )
+    return findings
 
 
 def _check_snapshot_alignment(manifest: JsonObject) -> list[QcFinding]:

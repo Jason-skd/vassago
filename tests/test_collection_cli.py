@@ -113,6 +113,7 @@ def test_collection_init_session_command_writes_manifest(tmp_path) -> None:
     assert manifest["firmware_config_id"] == "rd_candidate"
     assert manifest["companion_profile_id"] == "rd_background_default"
     assert manifest["background_plan"] is None
+    assert manifest["background_capture"] is None
     assert "config_id" not in manifest
     config_snapshot = manifest["config_snapshot"]
     assert isinstance(config_snapshot, dict)
@@ -121,6 +122,57 @@ def test_collection_init_session_command_writes_manifest(tmp_path) -> None:
     defaults = config_snapshot["defaults"]
     assert isinstance(defaults, dict)
     assert defaults["firmware_config_id"] == "rd_candidate"
+
+
+def test_collection_init_session_command_writes_background_manifest(tmp_path) -> None:
+    profile = collection_config.get_collection_profile("rd_phase1_default")
+    result = runner.invoke(
+        app,
+        [
+            "collection",
+            "rd",
+            "init-session",
+            "--config-id",
+            "rd_phase1_default",
+            "--collection-type",
+            "white_space",
+            "--subject-name",
+            "alice",
+            "--gesture",
+            profile.gestures[0],
+            "--environment",
+            profile.defaults.environment,
+            "--operator-name",
+            "operator_a",
+            "--radar-id",
+            "radar_01",
+            "--firmware-id",
+            "fw_01",
+            "--cli-port",
+            "/dev/cli",
+            "--data-port",
+            "/dev/data",
+            "--sessions-root",
+            str(tmp_path),
+            "--no-interactive",
+        ],
+    )
+
+    manifests = list(Path(tmp_path).glob("*/manifest.json"))
+
+    assert result.exit_code == 0
+    assert len(manifests) == 1
+    manifest = collection_session.load_manifest(manifests[0])
+    background_plan = manifest["background_plan"]
+    background_capture = manifest["background_capture"]
+    assert manifest["collection_type"] == collection_session.COLLECTION_TYPE_WHITE_SPACE
+    assert isinstance(background_plan, dict)
+    assert background_plan["sample_ratio"] == 2.0
+    assert background_plan["window_duration_s"] == 5.0
+    assert background_plan["target_segment_count"] == profile.batch_size * 2
+    assert isinstance(background_capture, dict)
+    assert background_capture["status"] == "planned"
+    assert manifest["takes"] == []
 
 
 def test_collection_init_session_command_allows_firmware_cfg_override(tmp_path) -> None:
@@ -360,3 +412,95 @@ def test_run_session_accepts_take_and_updates_manifest(tmp_path, monkeypatch) ->
         "start_s": 1.2,
         "end_s": 2.8,
     }
+
+
+def test_run_session_records_background_capture_and_updates_manifest(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    profile = collection_config.get_collection_profile("rd_phase1_default")
+    manifest_path, _manifest = collection_session.initialize_session(
+        session_input=collection_session.SessionInitInput(
+            profile=profile,
+            subject_name="alice",
+            hand="right",
+            distance_m=0.5,
+            angle_deg=0.0,
+            environment=profile.defaults.environment,
+            operator_name="operator_a",
+            note=None,
+            radar_id="radar_01",
+            firmware_id="fw_01",
+            gesture=profile.gestures[0],
+            firmware_config_id=profile.default_firmware_config_id,
+            cli_port="/dev/cli",
+            data_port="/dev/data",
+            data_baudrate=921_600,
+            collection_type=collection_session.COLLECTION_TYPE_WHITE_SPACE,
+        ),
+        sessions_root=tmp_path,
+    )
+
+    class FakeSerial:
+        def __init__(self, *_args, **kwargs) -> None:
+            self.timeout = kwargs.get("timeout", 0.0)
+
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, exc_type, exc, traceback) -> None:
+            return None
+
+        def reset_input_buffer(self) -> None:
+            return None
+
+        def read(self, _size: int) -> bytes:
+            return b""
+
+    monkeypatch.setattr(
+        "vassago.collection.rd.capture._configure_radar",
+        lambda _manifest: None,
+    )
+    monkeypatch.setattr(
+        "vassago.collection.rd.capture.serial.Serial",
+        FakeSerial,
+    )
+    monkeypatch.setattr(
+        "vassago.collection.rd.capture.time.sleep",
+        lambda _seconds: None,
+    )
+    monkeypatch.setattr(
+        "vassago.collection.rd.capture._capture_poll_timeout",
+        lambda _timeout: 0.0,
+    )
+    monkeypatch.setattr(
+        "vassago.collection.rd.capture._stream_background_capture",
+        lambda _connection, **kwargs: kwargs["raw_output"].write(b"abcdef") or 6,
+    )
+    perf_counter_values = iter([0.0, 0.0, 0.6])
+    monkeypatch.setattr(
+        "vassago.collection.rd.capture.time.perf_counter",
+        lambda: next(perf_counter_values),
+    )
+    monkeypatch.setattr(
+        "vassago.collection.rd.capture.collection_ui.render_background_capture_state",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "vassago.collection.rd.capture.collection_ui.render_background_capture_summary",
+        lambda *_args, **_kwargs: None,
+    )
+
+    summary = collection_capture.run_session(manifest_path)
+    updated_manifest = collection_session.load_manifest(manifest_path)
+    background_capture = updated_manifest["background_capture"]
+
+    assert summary.session_status == collection_session.SESSION_STATUS_COMPLETED
+    assert summary.accepted_take_count == 0
+    assert isinstance(background_capture, dict)
+    assert background_capture["status"] == "completed"
+    assert background_capture["recorded_bytes"] == 6
+    raw_uart_path = background_capture["raw_uart_path"]
+    assert isinstance(raw_uart_path, str)
+    assert Path(raw_uart_path).name == "background_raw_uart.bin"
+    assert collection_capture.resolve_repo_path(raw_uart_path).read_bytes() == b"abcdef"

@@ -10,6 +10,7 @@ def test_manifest_top_level_qc_contract_exposes_option_mirrors() -> None:
     assert "collection_type" in qc_contract.MANIFEST_TOP_LEVEL_EXTRACT_FIELDS
     assert "firmware_config_id" in qc_contract.MANIFEST_TOP_LEVEL_EXTRACT_FIELDS
     assert "companion_profile_id" in qc_contract.MANIFEST_TOP_LEVEL_EXTRACT_FIELDS
+    assert "background_capture" in qc_contract.MANIFEST_TOP_LEVEL_EXTRACT_FIELDS
     assert "gesture_options" in qc_contract.MANIFEST_TOP_LEVEL_EXTRACT_FIELDS
     assert "environment_options" in qc_contract.MANIFEST_TOP_LEVEL_EXTRACT_FIELDS
     assert "batch_size" not in qc_contract.MANIFEST_TOP_LEVEL_EXTRACT_FIELDS

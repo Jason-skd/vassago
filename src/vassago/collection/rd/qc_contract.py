@@ -42,6 +42,7 @@ MANIFEST_TOP_LEVEL_EXTRACT_FIELDS = (
     "firmware_config_id",
     "companion_profile_id",
     "background_plan",
+    "background_capture",
     "gesture",
     "gesture_options",
     "environment_options",

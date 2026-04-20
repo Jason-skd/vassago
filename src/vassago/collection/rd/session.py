@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import math
+import random
 import re
 from dataclasses import dataclass
 from datetime import UTC
@@ -21,13 +23,24 @@ if TYPE_CHECKING:
 DEFAULT_SESSIONS_ROOT = Path("data/collection/rd/sessions")
 MANIFEST_FILENAME = "manifest.json"
 RAW_UART_FILENAME = "raw_uart.bin"
-SESSION_SCHEMA_VERSION = "collection_rd_session_v7"
+BACKGROUND_RAW_UART_FILENAME = "background_raw_uart.bin"
+SESSION_SCHEMA_VERSION = "collection_rd_session_v8"
 SESSION_STATUS_PLANNED = "planned"
 SESSION_STATUS_IN_PROGRESS = "in_progress"
 SESSION_STATUS_COMPLETED = "completed"
 SESSION_STATUS_INTERRUPTED = "interrupted"
 TAKE_STATUS_PLANNED = "planned"
 TAKE_STATUS_ACCEPTED = "accepted"
+BACKGROUND_CAPTURE_STATUS_PLANNED = "planned"
+BACKGROUND_CAPTURE_STATUS_IN_PROGRESS = "in_progress"
+BACKGROUND_CAPTURE_STATUS_COMPLETED = "completed"
+BACKGROUND_CAPTURE_STATUS_INTERRUPTED = "interrupted"
+BACKGROUND_CAPTURE_STATUSES = (
+    BACKGROUND_CAPTURE_STATUS_PLANNED,
+    BACKGROUND_CAPTURE_STATUS_IN_PROGRESS,
+    BACKGROUND_CAPTURE_STATUS_COMPLETED,
+    BACKGROUND_CAPTURE_STATUS_INTERRUPTED,
+)
 COLLECTION_TYPE_GESTURE = "gesture"
 COLLECTION_TYPE_NORMAL_ACTIVITY = "normal_activity"
 COLLECTION_TYPE_WHITE_SPACE = "white_space"
@@ -36,6 +49,10 @@ COLLECTION_TYPES = (
     COLLECTION_TYPE_NORMAL_ACTIVITY,
     COLLECTION_TYPE_WHITE_SPACE,
 )
+BACKGROUND_SELECTION_POLICY_RANDOM_AFTER_CAPTURE = "random_after_capture"
+BACKGROUND_SAVE_POLICY_KEEP_FULL_CAPTURE = "keep_full_capture"
+BACKGROUND_SELECTION_SEED_MAX = 2**32 - 1
+SYSTEM_RANDOM = random.SystemRandom()
 
 type JsonObject = dict[str, object]
 
@@ -69,6 +86,7 @@ class SessionSummary:
     session_id: str
     manifest_path: Path
     session_status: str
+    collection_type: str
     subject_name: str
     gesture: str
     accepted_take_count: int
@@ -108,6 +126,21 @@ def build_session_manifest(
     profile = session_input.profile
     created_at = now.isoformat()
     collection_type = _require_collection_type(session_input.collection_type)
+    companion_profile_id = profile.default_companion_profile_id
+    background_plan = None
+    background_capture = None
+    takes: list[JsonObject] = build_take_plan(batch_size=profile.batch_size)
+    if collection_type != COLLECTION_TYPE_GESTURE:
+        companion_profile = collection_config.get_collection_companion_profile(
+            companion_profile_id
+        )
+        background_plan = build_background_plan(
+            profile=profile,
+            companion_profile=companion_profile,
+            collection_type=collection_type,
+        )
+        background_capture = build_background_capture_record()
+        takes = []
 
     return {
         "schema_version": SESSION_SCHEMA_VERSION,
@@ -130,8 +163,9 @@ def build_session_manifest(
         "radar_id": session_input.radar_id,
         "firmware_id": session_input.firmware_id,
         "firmware_config_id": session_input.firmware_config_id,
-        "companion_profile_id": profile.default_companion_profile_id,
-        "background_plan": None,
+        "companion_profile_id": companion_profile_id,
+        "background_plan": background_plan,
+        "background_capture": background_capture,
         "gesture": session_input.gesture,
         "gesture_options": list(profile.gestures),
         "environment_options": list(profile.environments),
@@ -139,7 +173,7 @@ def build_session_manifest(
         "data_port": session_input.data_port,
         "data_baudrate": session_input.data_baudrate,
         "config_snapshot": profile.as_snapshot(),
-        "takes": build_take_plan(batch_size=profile.batch_size),
+        "takes": takes,
     }
 
 
@@ -161,6 +195,55 @@ def build_take_plan(
         }
         for take_index in range(1, batch_size + 1)
     ]
+
+
+def build_background_plan(
+    *,
+    profile: CollectionProfile,
+    companion_profile: collection_config.CollectionCompanionProfile,
+    collection_type: str,
+) -> JsonObject:
+    """Build the persisted background capture plan derived at session init."""
+    if collection_type == COLLECTION_TYPE_GESTURE:
+        msg = "Background plan is only valid for background collection types."
+        raise ValueError(msg)
+
+    global_config = collection_config.load_collection_global_config_by_id(
+        profile.global_config_id
+    )
+    sample_ratio = companion_profile.sample_ratio_for(collection_type=collection_type)
+    window_duration_s = global_config.capture_window_duration_s
+    target_segment_count = math.ceil(profile.batch_size * sample_ratio)
+    planned_recording_duration_s = (
+        target_segment_count
+        * window_duration_s
+        * companion_profile.default_recording_duration_multiplier
+    )
+    return {
+        "sample_ratio": sample_ratio,
+        "default_recording_duration_multiplier": (
+            companion_profile.default_recording_duration_multiplier
+        ),
+        "window_duration_s": window_duration_s,
+        "target_segment_count": target_segment_count,
+        "planned_recording_duration_s": planned_recording_duration_s,
+        "selection_policy": BACKGROUND_SELECTION_POLICY_RANDOM_AFTER_CAPTURE,
+        "save_policy": BACKGROUND_SAVE_POLICY_KEEP_FULL_CAPTURE,
+        "selection_seed": SYSTEM_RANDOM.randint(0, BACKGROUND_SELECTION_SEED_MAX),
+    }
+
+
+def build_background_capture_record() -> JsonObject:
+    """Build the persisted runtime state used by background sessions."""
+    return {
+        "status": BACKGROUND_CAPTURE_STATUS_PLANNED,
+        "raw_uart_path": None,
+        "started_at": None,
+        "completed_at": None,
+        "interrupted_at": None,
+        "recording_duration_s": None,
+        "recorded_bytes": None,
+    }
 
 
 def load_manifest(manifest_path: Path) -> JsonObject:
@@ -207,6 +290,7 @@ def list_unfinished_sessions(
                 session_id=_require_str(manifest, "session_id"),
                 manifest_path=manifest_path,
                 session_status=session_status,
+                collection_type=_require_str(manifest, "collection_type"),
                 subject_name=_require_str(manifest, "subject_name"),
                 gesture=_require_str(manifest, "gesture"),
                 accepted_take_count=count_accepted_takes(manifest),
@@ -291,6 +375,68 @@ def build_take_output_path(*, manifest_path: Path, take: JsonObject) -> Path:
     return take_dir / RAW_UART_FILENAME
 
 
+def build_background_output_path(*, manifest_path: Path) -> Path:
+    """Return the destination path for one background continuous raw capture."""
+    background_dir = manifest_path.parent / "background"
+    background_dir.mkdir(parents=True, exist_ok=True)
+    return background_dir / BACKGROUND_RAW_UART_FILENAME
+
+
+def mark_background_capture_started(
+    *,
+    manifest: JsonObject,
+    raw_uart_path: Path,
+    started_at: datetime | None = None,
+) -> None:
+    """Persist the start of one background continuous capture."""
+    timestamp = started_at or local_now()
+    background_capture = _require_background_capture(manifest)
+    background_capture["status"] = BACKGROUND_CAPTURE_STATUS_IN_PROGRESS
+    background_capture["raw_uart_path"] = to_repo_relative_path(raw_uart_path)
+    background_capture["started_at"] = timestamp.isoformat()
+    background_capture["completed_at"] = None
+    background_capture["interrupted_at"] = None
+    background_capture["recording_duration_s"] = None
+    background_capture["recorded_bytes"] = None
+    manifest["updated_at"] = timestamp.isoformat()
+
+
+def complete_background_capture(
+    *,
+    manifest: JsonObject,
+    recording_duration_s: float,
+    recorded_bytes: int,
+    completed_at: datetime | None = None,
+) -> None:
+    """Persist successful completion details for a background capture."""
+    timestamp = completed_at or local_now()
+    background_capture = _require_background_capture(manifest)
+    background_capture["status"] = BACKGROUND_CAPTURE_STATUS_COMPLETED
+    background_capture["completed_at"] = timestamp.isoformat()
+    background_capture["interrupted_at"] = None
+    background_capture["recording_duration_s"] = recording_duration_s
+    background_capture["recorded_bytes"] = recorded_bytes
+    manifest["updated_at"] = timestamp.isoformat()
+
+
+def interrupt_background_capture(
+    *,
+    manifest: JsonObject,
+    recording_duration_s: float,
+    recorded_bytes: int,
+    interrupted_at: datetime | None = None,
+) -> None:
+    """Persist interruption details for a background capture."""
+    timestamp = interrupted_at or local_now()
+    background_capture = _require_background_capture(manifest)
+    background_capture["status"] = BACKGROUND_CAPTURE_STATUS_INTERRUPTED
+    background_capture["completed_at"] = None
+    background_capture["interrupted_at"] = timestamp.isoformat()
+    background_capture["recording_duration_s"] = recording_duration_s
+    background_capture["recorded_bytes"] = recorded_bytes
+    manifest["updated_at"] = timestamp.isoformat()
+
+
 def build_session_id(
     *,
     now: datetime,
@@ -325,6 +471,15 @@ def _require_takes(manifest: JsonObject) -> list[JsonObject]:
     return takes
 
 
+def _require_background_capture(manifest: JsonObject) -> JsonObject:
+    """Return the manifest background_capture object with lightweight validation."""
+    raw_background_capture = manifest.get("background_capture")
+    if not isinstance(raw_background_capture, dict):
+        msg = "Manifest is missing a background_capture object."
+        raise TypeError(msg)
+    return raw_background_capture
+
+
 def _require_str(data: JsonObject, key: str) -> str:
     """Require one string field from a manifest object."""
     value = data.get(key)
@@ -350,6 +505,8 @@ def _backfill_legacy_manifest_fields(manifest: JsonObject) -> None:
         manifest["collection_type"] = COLLECTION_TYPE_GESTURE
     if "background_plan" not in manifest:
         manifest["background_plan"] = None
+    if "background_capture" not in manifest:
+        manifest["background_capture"] = None
 
     raw_snapshot = manifest.get("config_snapshot")
     if not isinstance(raw_snapshot, dict):

@@ -86,6 +86,42 @@ def test_run_metadata_qc_warns_on_firmware_config_id_default_drift(tmp_path) -> 
     ) == ("firmware_config_id",)
 
 
+def test_run_metadata_qc_accepts_valid_background_manifest_contract(
+    tmp_path,
+) -> None:
+    manifest_path, manifest = _write_manifest(tmp_path)
+    manifest["collection_type"] = collection_session.COLLECTION_TYPE_WHITE_SPACE
+    manifest["background_plan"] = {
+        "sample_ratio": 2.0,
+        "default_recording_duration_multiplier": 1.25,
+        "window_duration_s": 5.0,
+        "target_segment_count": 2,
+        "planned_recording_duration_s": 12.5,
+        "selection_policy": "random_after_capture",
+        "save_policy": "keep_full_capture",
+        "selection_seed": 7,
+    }
+    manifest["background_capture"] = {
+        "status": "planned",
+        "raw_uart_path": None,
+        "started_at": None,
+        "completed_at": None,
+        "interrupted_at": None,
+        "recording_duration_s": None,
+        "recorded_bytes": None,
+    }
+    manifest["takes"] = []
+
+    report = metadata_qc.run_metadata_qc(
+        OfflineQcSessionContext(
+            manifest_path=manifest_path,
+            manifest=manifest,
+        )
+    )
+
+    assert report.findings == ()
+
+
 def test_run_metadata_qc_accepts_legacy_manifest_after_loader_backfill(
     tmp_path,
 ) -> None:
@@ -93,6 +129,7 @@ def test_run_metadata_qc_accepts_legacy_manifest_after_loader_backfill(
     manifest.pop("collection_type")
     manifest.pop("companion_profile_id")
     manifest.pop("background_plan")
+    manifest.pop("background_capture")
     config_snapshot = manifest["config_snapshot"]
     assert isinstance(config_snapshot, dict)
     config_snapshot["config_id"] = "rd_phase1_default"
@@ -304,6 +341,7 @@ def _build_valid_manifest(
         "firmware_config_id": "stub_mmwave_cfg",
         "companion_profile_id": "rd_background_default",
         "background_plan": None,
+        "background_capture": None,
         "gesture": "swipe_left",
         "gesture_options": ["swipe_left", "swipe_right"],
         "environment_options": ["office_lab", "hallway"],

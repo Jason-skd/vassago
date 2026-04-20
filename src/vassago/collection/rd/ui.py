@@ -65,6 +65,7 @@ def render_sessions(
     """Render resumable sessions."""
     table = Table(title="Unfinished Collection Sessions")
     table.add_column("Session ID")
+    table.add_column("Type")
     table.add_column("Status")
     table.add_column("Subject")
     table.add_column("Gesture")
@@ -75,6 +76,7 @@ def render_sessions(
     for summary in sessions:
         table.add_row(
             summary.session_id,
+            summary.collection_type,
             summary.session_status,
             summary.subject_name,
             summary.gesture,
@@ -84,7 +86,7 @@ def render_sessions(
         )
 
     if not sessions:
-        table.add_row("-", "-", "-", "-", "0", "0", "-")
+        table.add_row("-", "-", "-", "-", "-", "0", "0", "-")
 
     console.print(table)
 
@@ -105,38 +107,119 @@ def render_session_summary(
     table.add_row("collection_type", str(manifest.get("collection_type", "-")))
     table.add_row("subject_name", str(manifest["subject_name"]))
     table.add_row("gesture", str(manifest["gesture"]))
-    config_snapshot = manifest.get("config_snapshot")
-    profile_config_id = "-"
-    default_firmware_config_id = "-"
-    firmware_config_id = "-"
-    if isinstance(config_snapshot, dict):
-        raw_profile_config_id = config_snapshot.get("config_id")
-        if isinstance(raw_profile_config_id, str) and raw_profile_config_id:
-            profile_config_id = raw_profile_config_id
-        defaults = config_snapshot.get("defaults")
-        if isinstance(defaults, dict):
-            raw_default_firmware_config_id = defaults.get("firmware_config_id")
-            if (
-                isinstance(raw_default_firmware_config_id, str)
-                and raw_default_firmware_config_id
-            ):
-                default_firmware_config_id = raw_default_firmware_config_id
-    raw_top_level_firmware_config_id = manifest.get("firmware_config_id")
-    raw_companion_profile_id = manifest.get("companion_profile_id")
-    companion_profile_id = "-"
-    if isinstance(raw_companion_profile_id, str) and raw_companion_profile_id:
-        companion_profile_id = raw_companion_profile_id
-    if (
-        isinstance(raw_top_level_firmware_config_id, str)
-        and raw_top_level_firmware_config_id
-    ):
-        firmware_config_id = raw_top_level_firmware_config_id
+    profile_config_id, default_firmware_config_id = _load_snapshot_summary_fields(
+        manifest
+    )
+    firmware_config_id = _load_non_empty_string(
+        manifest.get("firmware_config_id"),
+        default="-",
+    )
+    companion_profile_id = _load_non_empty_string(
+        manifest.get("companion_profile_id"),
+        default="-",
+    )
     table.add_row("profile_config_id", profile_config_id)
     table.add_row("companion_profile_id", companion_profile_id)
     table.add_row("default_firmware_config_id", default_firmware_config_id)
     table.add_row("firmware_config_id", firmware_config_id)
     table.add_row("cli_port", str(manifest["cli_port"]))
     table.add_row("data_port", str(manifest["data_port"]))
+    _append_background_summary_rows(table, manifest=manifest)
+    console.print(table)
+
+
+def _load_snapshot_summary_fields(manifest: dict[str, object]) -> tuple[str, str]:
+    """Extract profile snapshot fields used in the session summary."""
+    config_snapshot = manifest.get("config_snapshot")
+    if not isinstance(config_snapshot, dict):
+        return "-", "-"
+
+    profile_config_id = _load_non_empty_string(
+        config_snapshot.get("config_id"),
+        default="-",
+    )
+    defaults = config_snapshot.get("defaults")
+    if not isinstance(defaults, dict):
+        return profile_config_id, "-"
+    default_firmware_config_id = _load_non_empty_string(
+        defaults.get("firmware_config_id"),
+        default="-",
+    )
+    return profile_config_id, default_firmware_config_id
+
+
+def _append_background_summary_rows(
+    table: Table,
+    *,
+    manifest: dict[str, object],
+) -> None:
+    """Append optional background-session rows to the summary table."""
+    background_plan = manifest.get("background_plan")
+    if isinstance(background_plan, dict):
+        raw_target_segment_count = background_plan.get("target_segment_count")
+        raw_planned_recording_duration_s = background_plan.get(
+            "planned_recording_duration_s"
+        )
+        if isinstance(raw_target_segment_count, int):
+            table.add_row("target_segment_count", str(raw_target_segment_count))
+        if isinstance(raw_planned_recording_duration_s, int | float):
+            table.add_row(
+                "planned_recording_duration_s",
+                f"{float(raw_planned_recording_duration_s):.2f}s",
+            )
+
+    background_capture = manifest.get("background_capture")
+    if not isinstance(background_capture, dict):
+        return
+
+    status = _load_non_empty_string(background_capture.get("status"), default="")
+    if status:
+        table.add_row("background_capture_status", status)
+
+
+def _load_non_empty_string(value: object, *, default: str) -> str:
+    """Return a non-empty string or one fallback default."""
+    if isinstance(value, str) and value:
+        return value
+    return default
+
+
+def render_background_capture_state(
+    console: Console,
+    *,
+    collection_type: str,
+    planned_recording_duration_s: float,
+    target_segment_count: int,
+    sample_ratio: float,
+) -> None:
+    """Render the current state before one background capture begins."""
+    table = Table(title="Background Capture")
+    table.add_column("Field")
+    table.add_column("Value")
+    table.add_row("state", "ready")
+    table.add_row("collection_type", collection_type)
+    table.add_row("target_segment_count", str(target_segment_count))
+    table.add_row("sample_ratio", f"{sample_ratio:.2f}x")
+    table.add_row(
+        "planned_recording_duration",
+        f"{planned_recording_duration_s:.2f}s",
+    )
+    table.add_row("save_policy", "keep full continuous raw capture")
+    console.print(table)
+
+
+def render_background_capture_summary(
+    console: Console,
+    *,
+    recording_duration_s: float,
+    recorded_bytes: int,
+) -> None:
+    """Render a short summary after one background capture completes."""
+    table = Table(title="Background Capture Summary")
+    table.add_column("Field")
+    table.add_column("Value")
+    table.add_row("recording_duration", f"{recording_duration_s:.2f}s")
+    table.add_row("recorded_bytes", str(recorded_bytes))
     console.print(table)
 
 
