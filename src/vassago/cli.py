@@ -7,6 +7,7 @@ import typer
 from vassago.collection.rd import cli as collection_rd_cli
 from vassago.configs import cli as configs_cli
 from vassago.firmware.mmwave import cli as mmwave_cli
+from vassago.processing import cli as processing_cli
 
 app = typer.Typer(
     add_completion=False,
@@ -35,6 +36,13 @@ configs_app = typer.Typer(
 )
 app.add_typer(configs_app, name="configs")
 configs_cli.register_commands(configs_app)
+
+processing_app = typer.Typer(
+    help="Offline artifact generation workflows.",
+    no_args_is_help=True,
+)
+app.add_typer(processing_app, name="processing")
+processing_cli.register_commands(processing_app)
 
 mmwave_app = typer.Typer(
     help="TI-style mmWave UART tooling.",
