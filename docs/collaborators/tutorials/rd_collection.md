@@ -1,14 +1,23 @@
 # RD Collection 简明操作手册
 
-本文档面向需要执行毫米波手势数据采集的协作者。
+本文档面向需要执行 RD 毫米波数据采集的协作者，覆盖两类采集：
 
-`collection` 的目标是把一次采集会话拆成可恢复、可验收、可追踪的一组 take。当前版本会在 session 创建时先落一份 `manifest.json`，其中包含顶层公共字段和完整 `config_snapshot`；只有你明确接受样本后，才会补写正式 take 内容：
+- 手势正样本采集（`collection_type=gesture`）：逐 take 采集，人工 accept/retry
+- 空背景采集（`collection_type=white_space`）：连续录制背景原始数据（无人/无目标活动）
+
+`collection` 的目标是把一次采集会话做成可恢复、可验收、可追踪的 session。当前版本会在 session 创建时先落一份 `manifest.json`，其中包含顶层公共字段和完整 `config_snapshot`。
+
+其中：
+
+- `gesture` 会话会被拆成一组 take；只有你明确接受样本后，才会补写正式 take 内容：
 
 - `raw_uart.bin`
 - 当前 take 的 `status`
 - 本次真实 `capture_window`
 - 本次运行时生成的 `target_window`
 - 本次 `marked_window`
+
+而 `white_space` 会话不走逐 take 工作流，而是记录一段连续原始数据（见后文）。
 
 如果你已经完成板卡联调，并且已经创建或准备创建 session，可以按本文档执行采集。
 
@@ -64,6 +73,7 @@ uv run vassago collection rd init-session
 程序会依次引导你选择或输入：
 
 - collection profile
+- `collection_type`
 - `gesture`
 - firmware cfg
 - 串口
@@ -83,8 +93,42 @@ uv run vassago collection rd init-session
 - `gesture`、`environment` 不是自由输入，而是从 profile 里选择
 - firmware cfg 也会先给你一个受管 `config_id` 列表；当前 `rd_phase1_default` 默认高亮的是 `rd_pointcloud_dual`
 - session 创建成功后，会生成一个 `manifest.json`
-- `manifest.json` 顶层会直接写入本次 session 的公共字段，例如 `gesture`、`firmware_config_id`、`gesture_options`、`environment_options`、串口信息
+- `manifest.json` 顶层会直接写入本次 session 的公共字段，例如 `collection_type`、`gesture`、`firmware_config_id`、`gesture_options`、`environment_options`、串口信息
 - `config_snapshot` 会同时保留本次生效 collection config 的完整镜像，供后续追溯和离线 QC 使用
+
+### 3.1 空背景采集（white_space）怎么创建
+
+空背景采集的推荐方式也是用交互模式创建 session，然后在 `collection_type` 处选择：
+
+- `white_space`
+
+如果你希望创建完就立刻开始连续录制，可以加 `--run`：
+
+```bash
+uv run vassago collection rd init-session --run
+```
+
+如果你用非交互模式，至少需要显式指定 `--collection-type white_space`，其余参数与手势采集一致：
+
+```bash
+uv run vassago collection rd init-session \
+  --config-id rd_phase1_default \
+  --collection-type white_space \
+  --subject-name skd \
+  --gesture wave \
+  --environment office_lab \
+  --operator-name your_name \
+  --radar-id rd_aop_01 \
+  --firmware-id rd_phase1_uart \
+  --cli-port /dev/ttyXXX \
+  --data-port /dev/ttyYYY \
+  --no-interactive
+```
+
+说明：
+
+- 目前 `collection_type` 影响的是“运行时采集策略”，而不是 `gesture/environment` 这类顶层公共字段的存在与否
+- `white_space` 要求尽量保持无人/无目标活动，以便形成稳定底噪背景数据
 
 如果你已经知道所有参数，也可以用非交互模式：
 
@@ -140,7 +184,8 @@ uv run vassago collection rd run-session
 - 列出所有未完成 session
 - 让你选择一个 session 继续
 - 重新下发该 session 绑定的 `cfg`
-- 从下一个未接受的 take 开始采集
+- 若为 `gesture`：从下一个未接受的 take 开始采集
+- 若为 `white_space`：进入连续背景采集流程并落盘
 
 如果你已经知道 manifest 路径，也可以直接指定：
 
@@ -165,7 +210,10 @@ uv run vassago collection rd list-sessions
 
 ## 5. 采集时怎么操作
 
-进入 `run-session` 后，每个 take 都按下面流程执行。
+进入 `run-session` 后，会按 `collection_type` 分两类流程：
+
+- `gesture`：逐 take 采集（本节后续步骤）
+- `white_space`：连续背景采集（见本节末尾“空背景采集怎么运行”）
 
 ### 第一步：选择是否开始当前 take
 
@@ -237,6 +285,17 @@ uv run vassago collection rd list-sessions
 - `Retry take`
 - `Quit session`
 
+### 5.x 空背景采集（white_space）怎么运行
+
+当 session 的 `collection_type=white_space` 时，`run-session` 会：
+
+- 下发该 session 绑定的 mmWave cfg
+- 进入连续录制
+- 把连续原始 UART 数据写入 session 目录下的：
+  - `background/background_raw_uart.bin`
+
+并在 `manifest.json` 中记录本次连续录制的状态、开始/结束时间、录制时长与字节数。
+
 ## 6. 接受一个 take 之后会发生什么
 
 当你选择 `Accept take` 后，系统会：
@@ -267,6 +326,15 @@ data/collection/rd/sessions/<session_id>/
       raw_uart.bin
     take02/
       raw_uart.bin
+```
+
+空背景采集的目录结构通常长这样：
+
+```text
+data/collection/rd/sessions/<session_id>/
+  manifest.json
+  background/
+    background_raw_uart.bin
 ```
 
 ## 7. 如何判断这次 session 采集正常

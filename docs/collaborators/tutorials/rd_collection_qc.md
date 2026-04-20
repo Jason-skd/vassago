@@ -22,6 +22,11 @@
 - 采集当下，先看 `quick QC`
 - 一轮 session 结束后，再跑 `offline-qc`
 
+补充（空背景采集 / `white_space`）：
+
+- `white_space` 不走逐 take 的 `Accept take` 流程，因此**没有 live `quick QC` gate**
+- `white_space` 的 QC 重点落在 offline 阶段（manifest 契约、连续采集记录；以及后续切片产物的校验）
+
 仓库的 `pre-commit` 会自动执行一次全量 `offline-qc-all`，扫描 `data/collection/rd/sessions/` 下的全部 session manifest。手动先跑一遍当前 session 的 `offline-qc`，意义是更早发现问题；手动跑一遍 `offline-qc-all`，则可以完整复现 hook 的检查口径。
 
 ## 2. 最短执行路径
@@ -36,6 +41,15 @@ data/collection/rd/sessions/<session_id>/
       raw_uart.bin
 ```
 
+空背景采集（`white_space`）通常长这样：
+
+```text
+data/collection/rd/sessions/<session_id>/
+  manifest.json
+  background/
+    background_raw_uart.bin
+```
+
 先检查当前这一个 session 时，直接运行：
 
 ```bash
@@ -46,6 +60,10 @@ uv run vassago collection rd offline-qc --manifest data/collection/rd/sessions/<
 
 - `manifest.json` 顶层字段和 `config_snapshot` 是否还符合约定
 - 所有 `accepted` take 的 `raw_uart.bin`、窗口信息和 quick-QC 结果是否还能离线重放通过
+
+说明：
+
+- 对于 `white_space` 会话，可能不存在 `accepted takes`；此时 offline QC 仍应至少覆盖 manifest 顶层契约与背景采集记录字段的一致性。
 
 如果你想在提交前完整复现仓库 hook 的行为，再运行：
 

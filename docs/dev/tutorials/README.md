@@ -29,6 +29,8 @@
   `configs` 相关命令指南，覆盖文件发现、配置消费与全量验证。
 - [mmwave_packet_tlv_guide.md](mmwave_packet_tlv_guide.md)
   mmWave Data UART 中 `chunk`、`raw_capture`、`packet(frame)`、TLV 与点云帧的分层心智模型。
+- [processing-rd-extract-command-guide.md](processing-rd-extract-command-guide.md)
+  `raw_uart.bin -> rd.npz` 的离线导出命令指南，覆盖 `extract` 与 `extract-all`。
 - [collection-toml-authoring.md](collection-toml-authoring.md)
   RD collection profile TOML 编写说明书。
 
