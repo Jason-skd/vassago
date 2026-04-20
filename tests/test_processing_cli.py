@@ -109,3 +109,110 @@ def test_processing_rd_extract_command_writes_artifact(tmp_path, monkeypatch) ->
     assert result.exit_code == 0
     assert "written_artifacts: 1" in result.output
     assert (take_dir / "rd.npz").is_file()
+
+
+def test_processing_rd_extract_all_command_writes_artifacts(
+    tmp_path, monkeypatch
+) -> None:
+    config_path = tmp_path / "configs" / "rd.cfg"
+    write_test_config(config_path)
+
+    sessions_root = tmp_path / "sessions"
+
+    session_one_dir = sessions_root / "session_01"
+    take_one_dir = session_one_dir / "takes" / "take01"
+    take_one_dir.mkdir(parents=True, exist_ok=True)
+    raw_uart_one_path = take_one_dir / "raw_uart.bin"
+    raw_uart_one_path.write_bytes(build_rd_packet(frame_number=20))
+    manifest_one_path = session_one_dir / "manifest.json"
+    manifest_one_path.write_text(
+        json.dumps(
+            {
+                "session_id": "session_01",
+                "subject_name": "alice",
+                "hand": "right",
+                "distance_m": 0.5,
+                "angle_deg": 0.0,
+                "environment": "lab",
+                "radar_id": "radar_01",
+                "firmware_id": "fw_01",
+                "firmware_config_id": "rd_candidate",
+                "gesture": "wave",
+                "takes": [
+                    {
+                        "take_id": "take01",
+                        "status": "accepted",
+                        "raw_uart_path": str(raw_uart_one_path.resolve()),
+                        "capture_window": {"start_s": 0.0, "end_s": 5.0},
+                        "target_window": {"start_s": 1.0, "end_s": 2.0},
+                        "marked_window": {"start_s": 1.1, "end_s": 2.1},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    session_two_dir = sessions_root / "session_02"
+    take_two_dir = session_two_dir / "takes" / "take01"
+    take_two_dir.mkdir(parents=True, exist_ok=True)
+    raw_uart_two_path = take_two_dir / "raw_uart.bin"
+    raw_uart_two_path.write_bytes(build_rd_packet(frame_number=21))
+    manifest_two_path = session_two_dir / "manifest.json"
+    manifest_two_path.write_text(
+        json.dumps(
+            {
+                "session_id": "session_02",
+                "subject_name": "bob",
+                "hand": "left",
+                "distance_m": None,
+                "angle_deg": None,
+                "environment": "lab",
+                "radar_id": "radar_01",
+                "firmware_id": "fw_01",
+                "firmware_config_id": "rd_candidate",
+                "gesture": "wave",
+                "takes": [
+                    {
+                        "take_id": "take01",
+                        "status": "accepted",
+                        "raw_uart_path": str(raw_uart_two_path.resolve()),
+                        "capture_window": {"start_s": 0.0, "end_s": 5.0},
+                        "target_window": {"start_s": 1.0, "end_s": 2.0},
+                        "marked_window": None,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "vassago.processing.rd.artifact.mmwave_config.get_known_config",
+        lambda _config_id: KnownMmwaveConfig(
+            config_id="rd_candidate",
+            path=config_path,
+            label="RD",
+            purpose="test",
+            risk="high",
+            recommended_for_bringup=False,
+        ),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "processing",
+            "rd",
+            "extract-all",
+            "--sessions-root",
+            str(sessions_root),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "RD Extract All Summary" in result.output
+    assert "checked_manifests: 2" in result.output
+    assert "written_artifacts: 2" in result.output
+    assert (take_one_dir / "rd.npz").is_file()
+    assert (take_two_dir / "rd.npz").is_file()

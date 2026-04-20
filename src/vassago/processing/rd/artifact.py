@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import TypeGuard
@@ -26,6 +27,70 @@ type JsonObject = dict[str, object]
 
 class RdArtifactExistsError(FileExistsError):
     """Raised when rd.npz already exists and overwrite is disabled."""
+
+
+@dataclass(slots=True, frozen=True)
+class RdExtractManifestResult:
+    """One rd.npz extraction result bound to one collection manifest."""
+
+    manifest_path: Path
+    written_paths: tuple[Path, ...]
+    error: str | None = None
+
+
+@dataclass(slots=True, frozen=True)
+class RdExtractAllRunResult:
+    """Aggregated full-repository rd.npz extraction results."""
+
+    manifest_results: tuple[RdExtractManifestResult, ...]
+
+    @property
+    def checked_manifest_count(self) -> int:
+        """Return how many manifests were checked in this run."""
+        return len(self.manifest_results)
+
+    @property
+    def written_artifact_count(self) -> int:
+        """Return how many rd.npz artifacts were written in this run."""
+        return sum(len(result.written_paths) for result in self.manifest_results)
+
+    @property
+    def failed_manifest_count(self) -> int:
+        """Return how many manifests failed extraction."""
+        return sum(1 for result in self.manifest_results if result.error is not None)
+
+
+def extract_all_sessions(
+    *,
+    sessions_root: str | Path = collection_session.DEFAULT_SESSIONS_ROOT,
+    overwrite: bool = False,
+) -> RdExtractAllRunResult:
+    """Extract rd.npz artifacts for every discovered session manifest."""
+    manifest_results: list[RdExtractManifestResult] = []
+    for manifest_path in _discover_manifest_paths(sessions_root=sessions_root):
+        try:
+            written_paths = extract_manifest_samples(
+                manifest_path=manifest_path,
+                overwrite=overwrite,
+            )
+        except Exception as exc:  # noqa: BLE001
+            manifest_results.append(
+                RdExtractManifestResult(
+                    manifest_path=manifest_path,
+                    written_paths=(),
+                    error=str(exc),
+                )
+            )
+        else:
+            manifest_results.append(
+                RdExtractManifestResult(
+                    manifest_path=manifest_path,
+                    written_paths=written_paths,
+                    error=None,
+                )
+            )
+
+    return RdExtractAllRunResult(manifest_results=tuple(manifest_results))
 
 
 def write_rd_npz(
@@ -256,3 +321,12 @@ def _optional_window_to_tuple(
 def _is_number(value: object) -> TypeGuard[int | float]:
     """Return whether one JSON-like value is numeric but not bool."""
     return isinstance(value, int | float) and not isinstance(value, bool)
+
+
+def _discover_manifest_paths(*, sessions_root: str | Path) -> tuple[Path, ...]:
+    resolved_sessions_root = resolve_repo_path(sessions_root)
+    if not resolved_sessions_root.exists():
+        return ()
+    return tuple(
+        sorted(resolved_sessions_root.glob(f"*/{collection_session.MANIFEST_FILENAME}"))
+    )
