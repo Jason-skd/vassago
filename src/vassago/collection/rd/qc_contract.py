@@ -24,6 +24,7 @@ QC_SEVERITY_INFO: QcSeverity = "info"
 QC_PLUGIN_OFFLINE = "offline_qc"
 QC_PLUGIN_QUICK = "quick_qc"
 QC_PLUGIN_METADATA = "metadata_qc"
+QC_PLUGIN_BACKGROUND_NPZ = "background_npz_qc"
 QC_PLUGIN_AI_PRECHECK = "ai_precheck"
 
 MANIFEST_TOP_LEVEL_EXTRACT_FIELDS = (

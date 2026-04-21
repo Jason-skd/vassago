@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import struct
 from typing import TYPE_CHECKING
 
 from typer.testing import CliRunner
 
 from vassago.cli import app
+from vassago.collection.rd import background_npz_qc
 from vassago.collection.rd import metadata_qc
 from vassago.collection.rd import offline_qc
 from vassago.collection.rd import quick_qc
@@ -14,8 +16,10 @@ from vassago.collection.rd.qc_contract import QC_PLUGIN_OFFLINE
 from vassago.collection.rd.qc_contract import QC_SEVERITY_ERROR
 from vassago.collection.rd.qc_contract import QC_SEVERITY_WARN
 from vassago.collection.rd.qc_contract import OfflineQcSessionContext
+from vassago.firmware.mmwave.config import KnownMmwaveConfig
 from vassago.firmware.mmwave.protocol import HEADER_SIZE
 from vassago.firmware.mmwave.protocol import MAGIC_WORD
+from vassago.processing.rd import artifact as rd_artifact
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -180,13 +184,49 @@ def test_run_offline_qc_surfaces_quick_qc_findings_per_take(tmp_path) -> None:
     )
 
 
-def test_run_offline_qc_accepts_completed_background_capture(tmp_path) -> None:
+def test_run_offline_qc_accepts_completed_background_capture(
+    tmp_path,
+    monkeypatch,
+) -> None:
     manifest_path, _manifest = _write_background_manifest(tmp_path)
+    _write_background_rd_segments(
+        manifest_path=manifest_path,
+        monkeypatch=monkeypatch,
+    )
 
     report = offline_qc.run_offline_qc(manifest_path=manifest_path)
 
     assert report.findings == ()
     assert report.has_errors is False
+
+
+def test_run_offline_qc_requires_background_segment_index(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    manifest_path, _manifest = _write_background_manifest(tmp_path)
+    _write_background_rd_segments(
+        manifest_path=manifest_path,
+        monkeypatch=monkeypatch,
+    )
+    index_path = (
+        manifest_path.parent
+        / "background"
+        / rd_artifact.DEFAULT_BACKGROUND_SEGMENT_INDEX_FILENAME
+    )
+    index_path.unlink()
+
+    report = offline_qc.run_offline_qc(manifest_path=manifest_path)
+
+    assert tuple(finding.plugin for finding in report.findings) == (
+        background_npz_qc.QC_PLUGIN_BACKGROUND_NPZ,
+    )
+    assert tuple(finding.code for finding in report.findings) == (
+        background_npz_qc.CODE_SEGMENT_INDEX_NOT_FOUND,
+    )
+    assert tuple(finding.field_path for finding in report.findings) == (
+        background_npz_qc.INDEX_FIELD_PREFIX,
+    )
 
 
 def test_run_offline_qc_requires_completed_background_capture(tmp_path) -> None:
@@ -227,6 +267,64 @@ def test_run_offline_qc_surfaces_background_capture_size_mismatch(tmp_path) -> N
     )
     assert tuple(finding.field_path for finding in report.findings) == (
         "background_capture.recorded_bytes",
+    )
+
+
+def test_run_offline_qc_detects_background_segment_index_mismatch(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    manifest_path, _manifest = _write_background_manifest(tmp_path)
+    _write_background_rd_segments(
+        manifest_path=manifest_path,
+        monkeypatch=monkeypatch,
+    )
+    index_path = (
+        manifest_path.parent
+        / "background"
+        / rd_artifact.DEFAULT_BACKGROUND_SEGMENT_INDEX_FILENAME
+    )
+    index_payload = json.loads(index_path.read_text(encoding="utf-8"))
+    index_payload["selection_seed"] = 8
+    index_path.write_text(
+        json.dumps(index_payload, indent=2, sort_keys=False) + "\n",
+        encoding="utf-8",
+    )
+
+    report = offline_qc.run_offline_qc(manifest_path=manifest_path)
+
+    assert tuple(finding.plugin for finding in report.findings) == (
+        background_npz_qc.QC_PLUGIN_BACKGROUND_NPZ,
+    )
+    assert tuple(finding.code for finding in report.findings) == (
+        background_npz_qc.CODE_SEGMENT_INDEX_MISMATCH,
+    )
+    assert tuple(finding.field_path for finding in report.findings) == (
+        f"{background_npz_qc.INDEX_FIELD_PREFIX}.selection_seed",
+    )
+
+
+def test_run_offline_qc_detects_missing_background_segment_artifact(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    manifest_path, _manifest = _write_background_manifest(tmp_path)
+    written_paths = _write_background_rd_segments(
+        manifest_path=manifest_path,
+        monkeypatch=monkeypatch,
+    )
+    written_paths[0].unlink()
+
+    report = offline_qc.run_offline_qc(manifest_path=manifest_path)
+
+    assert tuple(finding.plugin for finding in report.findings) == (
+        background_npz_qc.QC_PLUGIN_BACKGROUND_NPZ,
+    )
+    assert tuple(finding.code for finding in report.findings) == (
+        background_npz_qc.CODE_SEGMENT_ARTIFACT_NOT_FOUND,
+    )
+    assert tuple(finding.field_path for finding in report.findings) == (
+        f"{background_npz_qc.INDEX_FIELD_PREFIX}.segments[0].rd_npz_path",
     )
 
 
@@ -357,13 +455,20 @@ def _write_manifest(
 def _write_background_manifest(
     tmp_path: Path,
     *,
-    raw_capture: bytes = b"abcdef",
+    raw_capture: bytes | None = None,
     recorded_bytes: int | None = None,
 ) -> tuple[Path, dict[str, object]]:
     background_dir = tmp_path / "background"
     background_dir.mkdir(parents=True, exist_ok=True)
     raw_uart_path = background_dir / collection_session.BACKGROUND_RAW_UART_FILENAME
-    raw_uart_path.write_bytes(raw_capture)
+    resolved_raw_capture = (
+        b"".join(
+            _build_rd_packet(frame_number=frame_number) for frame_number in range(1, 16)
+        )
+        if raw_capture is None
+        else raw_capture
+    )
+    raw_uart_path.write_bytes(resolved_raw_capture)
 
     manifest = _build_valid_manifest(
         raw_uart_path=raw_uart_path,
@@ -387,7 +492,7 @@ def _write_background_manifest(
         "completed_at": "2026-04-12T09:00:12+08:00",
         "interrupted_at": None,
         "recording_duration_s": 12.5,
-        "recorded_bytes": len(raw_capture)
+        "recorded_bytes": len(resolved_raw_capture)
         if recorded_bytes is None
         else recorded_bytes,
     }
@@ -522,3 +627,60 @@ def _build_packet(frame_number: int, tlv_types: list[int]) -> bytes:
         0,
     )
     return header + tlv_payload
+
+
+def _build_rd_packet(frame_number: int) -> bytes:
+    value_count = 8 * 4
+    rd_payload = struct.pack(f"<{value_count}H", *range(value_count))
+    tlv_payload = struct.pack("<II", 5, len(rd_payload)) + rd_payload
+    total_packet_length = HEADER_SIZE + len(tlv_payload)
+    header = MAGIC_WORD + struct.pack(
+        "<8I",
+        0x03060000,
+        total_packet_length,
+        0xA6843,
+        frame_number,
+        0,
+        0,
+        1,
+        0,
+    )
+    return header + tlv_payload
+
+
+def _write_test_rd_config(config_path: Path) -> Path:
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        (
+            "channelCfg 15 7 0\n"
+            "profileCfg 0 60 7 3 24 0 0 166 1 8 12500 0 0 158\n"
+            "frameCfg 0 2 4 0 1000 1 0\n"
+        ),
+        encoding="utf-8",
+    )
+    return config_path
+
+
+def _write_background_rd_segments(
+    *,
+    manifest_path: Path,
+    monkeypatch,
+) -> tuple[Path, ...]:
+    config_path = _write_test_rd_config(manifest_path.parent / "configs" / "rd.cfg")
+    known_config = KnownMmwaveConfig(
+        config_id="stub_mmwave_cfg",
+        path=config_path,
+        label="RD",
+        purpose="test",
+        risk="high",
+        recommended_for_bringup=False,
+    )
+    monkeypatch.setattr(
+        "vassago.processing.rd.artifact.mmwave_config.get_known_config",
+        lambda _config_id: known_config,
+    )
+    monkeypatch.setattr(
+        "vassago.collection.rd.background_npz_qc.mmwave_config.get_known_config",
+        lambda _config_id: known_config,
+    )
+    return rd_artifact.extract_manifest_samples(manifest_path=manifest_path)

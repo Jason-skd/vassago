@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 from typing import TypeGuard
 
+from vassago.collection.rd import background_npz_qc
 from vassago.collection.rd import capture as collection_capture
 from vassago.collection.rd import metadata_qc
 from vassago.collection.rd import quick_qc
@@ -422,4 +423,5 @@ def _quick_error(
 DEFAULT_OFFLINE_QC_CHECKS: tuple[OfflineQcCheck, ...] = (
     metadata_qc.run_metadata_qc,
     run_offline_quick_qc,
+    background_npz_qc.run_background_npz_qc,
 )

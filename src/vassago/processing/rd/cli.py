@@ -27,12 +27,17 @@ def handle_extract(
     ],
     take_id: Annotated[
         str | None,
-        typer.Option(help="Extract only one accepted take_id from the manifest."),
+        typer.Option(
+            help="Extract only one accepted gesture take_id from the manifest."
+        ),
     ] = None,
     output: Annotated[
         Path | None,
         typer.Option(
-            help="Explicit rd.npz output path. Requires --take-id.",
+            help=(
+                "Explicit rd.npz output path for gesture extraction. "
+                "Requires --take-id."
+            ),
         ),
     ] = None,
     overwrite: Annotated[

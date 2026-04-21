@@ -56,9 +56,6 @@ extend-select = [
 [tool.ruff.lint.isort]
 force-single-line = true
 
-[tool.ruff.lint.pylint]
-max-args = 8
-
 [tool.ruff.lint.per-file-ignores]
 # Typer command signatures naturally use bool defaults for option flags.
 "src/vassago/firmware/mmwave/cli.py" = [

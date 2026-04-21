@@ -609,6 +609,27 @@
 - `offline_qc` 是 orchestrator，不是随手堆规则的地方
 - 新的离线 QC 检查优先按 peer check 接入，而不是把逻辑全塞进 CLI
 
+### [src/vassago/collection/rd/background_npz_qc.py](../../../src/vassago/collection/rd/background_npz_qc.py)
+
+优先复用场景：
+
+- 需要校验 `normal_activity` / `white_space` 这类 background session 的切片产物
+- 需要重放 background 随机切片并验证 `background/rd_segments_manifest.json`
+- 需要校验 `background/segments/<segment_id>/rd.npz` 是否与确定性 replay 一致
+
+优先复用的函数与常量：
+
+- `run_background_npz_qc()`
+- `CODE_SEGMENT_INDEX_NOT_FOUND`
+- `CODE_SEGMENT_INDEX_MISMATCH`
+- `CODE_SEGMENT_ARTIFACT_NOT_FOUND`
+- `CODE_SEGMENT_ARTIFACT_INVALID`
+
+最重要的原则：
+
+- background 切片 QC 逻辑优先放在这个 peer check 里，不要把 segment 校验规则塞回 `offline_qc` orchestrator
+- 如果你需要验证 background 产物是否可复算，优先复用这里对 deterministic replay 的实现
+
 ### [src/vassago/collection/rd/qc_contract.py](../../../src/vassago/collection/rd/qc_contract.py)
 
 优先复用场景：
@@ -672,7 +693,72 @@
 - `ui.py`
 - `firmware/mmwave/*`
 
-## 6. 命令入口本身也值得复用
+## 6. RD Processing 复用面
+
+这一组模块负责“raw UART 怎么离线提 RD、canonical `rd.npz` 怎么落盘、background 随机切片怎么复用”。
+
+### [src/vassago/processing/rd/extract.py](../../../src/vassago/processing/rd/extract.py)
+
+优先复用场景：
+
+- 需要把一份 `raw_uart.bin` 提取成 RD cube
+- 需要离线回放背景连续采集并拿到 frame 级 RD 数据
+- 需要在导出、QC 或后续训练前处理里共享同一套 RD 提取逻辑
+
+优先复用的函数与类型：
+
+- `extract_rd_capture()`
+- `ExtractedRdCapture`
+
+最重要的原则：
+
+- 不要在 extractor、QC 或一次性脚本里各自再写一份 `raw_uart -> RD cube` 逻辑
+
+### [src/vassago/processing/rd/artifact.py](../../../src/vassago/processing/rd/artifact.py)
+
+优先复用场景：
+
+- 需要把提取后的 RD 数据写成 canonical `rd.npz`
+- 需要从 collection manifest 批量导出 gesture take 的 `rd.npz`
+- 需要从 background 连续采集里做确定性随机切片，并落盘 segment `rd.npz` 与 index/manifest
+
+优先复用的函数与类型：
+
+- `extract_manifest_samples()`
+- `extract_all_sessions()`
+- `write_rd_npz()`
+- `build_rd_npz_sample()`
+- `build_background_rd_npz_sample()`
+- `select_background_windows()`
+- `resolve_background_raw_uart_path()`
+- `default_background_segment_output_path()`
+- `default_background_segment_index_path()`
+
+最重要的原则：
+
+- gesture 导出和 background 切片都优先走这里，不要在 CLI、offline QC 或训练准备脚本里再复制一套路径和切片逻辑
+- background 的随机切片逻辑应该放在 `processing/rd`，这样导出与 QC 才能共享同一份 deterministic replay 规则
+
+### [src/vassago/processing/rd/model.py](../../../src/vassago/processing/rd/model.py)
+
+优先复用场景：
+
+- 需要共享 `rd.npz` 的 schema 模型
+- 需要表达 background segment index/manifest 的结构
+- 需要在写文件、读文件、测试夹具之间复用稳定字段集合
+
+优先复用的类型与常量：
+
+- `RdNpzSample`
+- `BackgroundRdNpzSample`
+- `BackgroundRdSegmentRecord`
+- `BackgroundRdSegmentIndex`
+
+最重要的原则：
+
+- 不要在测试、QC、导出器里各自再发明一套 background segment index schema
+
+## 7. 命令入口本身也值得复用
 
 ### [src/vassago/cli.py](../../../src/vassago/cli.py)
 
@@ -684,7 +770,7 @@
 - 沿用 `register_commands()` 这种组织方式
 - 让新命令复用现有库层模块，而不是把业务逻辑写进 handler
 
-## 7. 测试文件也是复用示例
+## 8. 测试文件也是复用示例
 
 如果你不确定某个模块该怎么用，先看测试。
 
@@ -703,13 +789,17 @@
 - [tests/test_collection_quick_qc.py](../../../tests/test_collection_quick_qc.py)
   看 quick QC 的共享检查和 live 兼容层怎么用。
 - [tests/test_collection_offline_qc.py](../../../tests/test_collection_offline_qc.py)
-  看 metadata QC、offline quick-QC replay 和 `offline-qc` CLI 怎么用。
+  看 metadata QC、offline quick-QC replay、background slice QC 和 `offline-qc` CLI 怎么用。
 - [tests/test_collection_cli.py](../../../tests/test_collection_cli.py)
   看 CLI 如何薄层接线到库层模块。
 - [tests/test_collection_visualizer.py](../../../tests/test_collection_visualizer.py)
   看 visualizer packet consumer 怎样复用共享 parser 和点云 frame 解码。
+- [tests/test_processing_rd.py](../../../tests/test_processing_rd.py)
+  看 gesture `rd.npz` 导出、background 随机切片和 segment index 写盘怎么用。
+- [tests/test_processing_cli.py](../../../tests/test_processing_cli.py)
+  看 `processing rd extract` / `extract-all` 怎样覆盖 gesture 与 background manifest。
 
-## 8. 常见任务应该先复用什么
+## 9. 常见任务应该先复用什么
 
 如果你现在要做的是：
 
@@ -735,14 +825,18 @@
   先看 `collection.rd.quick_qc`
 - “跑完整离线 QC”
   先看 `collection.rd.offline_qc`
+- “校验 background 切片产物”
+  先看 `collection.rd.background_npz_qc`
 - “校验 manifest contract / snapshot 对照关系”
   先看 `collection.rd.metadata_qc`
 - “定义 collection QC finding / report / manifest contract”
   先看 `collection.rd.qc_contract`
+- “离线导出 `rd.npz` 或重放 background 随机切片”
+  先看 `processing.rd.artifact` 和 `processing.rd.extract`
 - “给 CLI 加交互”
   先看 `firmware.mmwave.ui` 或 `collection.rd.ui`
 
-## 9. 什么时候才应该新开模块
+## 10. 什么时候才应该新开模块
 
 只有在下面几种情况下，才值得新开一份实现：
 

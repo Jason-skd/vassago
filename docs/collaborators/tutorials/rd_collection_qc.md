@@ -63,7 +63,16 @@ uv run vassago collection rd offline-qc --manifest data/collection/rd/sessions/<
 
 说明：
 
-- 对于 `white_space` 会话，可能不存在 `accepted takes`；此时 offline QC 仍应至少覆盖 manifest 顶层契约与背景采集记录字段的一致性。
+- 对于 `white_space` / background 会话，先运行一次：
+
+```bash
+uv run vassago processing rd extract --manifest data/collection/rd/sessions/<session_id>/manifest.json
+```
+
+- 这一步会生成：
+  - `background/rd_segments_manifest.json`
+  - `background/segments/<segment_id>/rd.npz`
+- 当前 offline QC 会额外检查这份切片 index/manifest 与各个 `rd.npz` 是否完整、可重放且和 selection seed 对得上。
 
 如果你想在提交前完整复现仓库 hook 的行为，再运行：
 
@@ -99,6 +108,8 @@ uv run vassago collection rd offline-qc-all
   更像样本或 take 产物问题。优先检查对应 take 的 `raw_uart.bin`、结束打点和窗口字段。
 - `metadata_qc:*`
   更像 manifest 契约问题。优先检查 `manifest.json` 顶层字段、`config_snapshot` 和 take 结构有没有缺字段或被手工改坏。
+- `background_npz_qc:*`
+  更像空背景切片产物问题。优先检查 `background/rd_segments_manifest.json`、segment `rd.npz` 文件以及 selection seed 对应的窗口记录。
 
 可以先按这个顺序处理：
 

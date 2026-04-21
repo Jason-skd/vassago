@@ -38,33 +38,54 @@ RD 离线处理命令树：
 
 ## `extract`: 导出单个 manifest
 
-用途：从一个 `manifest.json` 中挑选 accepted takes，逐个导出 `rd.npz`。
+用途：从一个 `manifest.json` 中导出该 session 的 canonical `rd.npz` 产物。
+
+当前支持两类 manifest：
+
+- `gesture`
+  - 从 accepted takes 导出，每个 accepted take 产出一份 `rd.npz`
+- `normal_activity` / `white_space`
+  - 从连续 `background_capture.raw_uart_path` 中，按 `background_plan` 做确定性的固定窗口随机切片
+  - 每个被选中的 segment 产出一份 `rd.npz`
+  - 同时额外写出一份 `background/rd_segments_manifest.json`，记录随机切片索引
 
 ### 参数
 
 - `--manifest PATH`（必填）
   - 指向一个 collection session 的 `manifest.json`
 - `--take-id TAKE_ID`（可选）
-  - 只导出某一个 accepted take
+  - 只导出某一个 accepted gesture take
+  - 只适用于 `gesture` manifest
 - `--output PATH`（可选）
   - 显式指定输出路径
   - 约束：只有在同时指定 `--take-id` 时才允许使用
+  - 只适用于 `gesture` manifest
 - `--overwrite / --no-overwrite`（默认 `--no-overwrite`）
   - 若目标 `rd.npz` 已存在，是否覆盖
 
 ### 默认输出路径
 
+`gesture` manifest：
+
 - 不传 `--output` 时，默认写到该 take 的 `raw_uart.bin` 同目录下，文件名固定为 `rd.npz`
 - 因为一个 accepted take 对应一个 `raw_uart.bin`，因此也固定是一份 `rd.npz`
 
+`normal_activity` / `white_space` manifest：
+
+- segment `rd.npz` 固定写到：
+  - `background/segments/<segment_id>/rd.npz`
+- segment index 固定写到：
+  - `background/rd_segments_manifest.json`
+- 这类 manifest 不支持 `--take-id` 和 `--output`
+
 ### 行为与退出码
 
-- 若 manifest 中没有任何可导出的 accepted take，退出码为 **1**
-- 参数组合非法（例如 `--output` 未配 `--take-id`），会以参数错误退出
+- 若 manifest 中没有任何可导出的 RD 产物，退出码为 **1**
+- 参数组合非法（例如 `--output` 未配 `--take-id`，或对 background manifest 传 `--take-id` / `--output`），会以参数错误退出
 
 ### 示例
 
-导出一个 manifest 下所有 accepted takes：
+导出一个 `gesture` manifest 下所有 accepted takes：
 
 ```bash
 uv run vassago processing rd extract --manifest data/collection/rd/sessions/<session_id>/manifest.json
@@ -82,9 +103,15 @@ uv run vassago processing rd extract --manifest data/collection/rd/sessions/<ses
 uv run vassago processing rd extract --manifest data/collection/rd/sessions/<session_id>/manifest.json --take-id take01 --output /tmp/rd.npz
 ```
 
+导出一个 `white_space` / background manifest 的切片产物：
+
+```bash
+uv run vassago processing rd extract --manifest data/collection/rd/sessions/<session_id>/manifest.json
+```
+
 ## `extract-all`: 全量导出（扫描 sessions root）
 
-用途：扫描一个 sessions root 下所有 session manifest，批量导出所有 accepted takes 的 `rd.npz`。
+用途：扫描一个 sessions root 下所有 session manifest，批量导出所有可提取的 `rd.npz` 产物。
 
 这类命令的 CLI 风格与 `collection rd offline-qc-all` 保持一致：固定 summary 输出，并将失败转换成稳定 exit code。
 
@@ -100,7 +127,9 @@ uv run vassago processing rd extract --manifest data/collection/rd/sessions/<ses
 命令会打印：
 
 - `checked_manifests`: 扫描到并尝试处理的 manifest 数
-- `written_artifacts`: 实际写出的 `rd.npz` 文件数（按 take 计数）
+- `written_artifacts`: 实际写出的 `rd.npz` 文件数
+  - `gesture` 按 take 计数
+  - background manifest 按 selected segment 计数
 - `failed_manifests`: 处理失败的 manifest 数
 
 退出码规则：
@@ -127,13 +156,23 @@ uv run vassago processing rd extract-all --sessions-root /path/to/sessions
 
 ### 1) 为什么 `extract` 的 `--output` 需要 `--take-id`？
 
-因为 batch 导出是“一个 accepted take 一份 `rd.npz`”。如果不指定 take，`--output` 没有稳定的一对一映射目标。
+因为显式 `--output` 只服务于 gesture 单样本导出场景，也就是“一个 accepted take 一份 `rd.npz`”。如果不指定 take，`--output` 没有稳定的一对一映射目标；background manifest 也固定是多 segment 输出，不适合映射到单文件路径。
 
 ### 2) `rd.npz` 里会包含哪些字段？
 
 字段集合以 `docs/dev/context/20260420_training_rd_npz_contract.md` 为准；实现层会写出 `schema_version`、主数据 `rd` 以及训练必需的 metadata 与窗口标签。
 
-### 3) 为什么全量导出会把“没有 accepted takes 的 manifest”也算进 `checked_manifests`？
+### 3) background manifest 会额外产出什么？
+
+会额外产出：
+
+- `background/rd_segments_manifest.json`
+  - 记录 `window_duration_s`、`target_segment_count`、`selection_seed`、窗口索引和每个 segment 的输出路径
+- `background/segments/<segment_id>/rd.npz`
+  - 每个文件对应一个确定性 replay 可复算的固定时长切片
+
+随机切片逻辑固定放在 `processing/rd` 层，而不是 capture/live 流程里；`offline-qc` 会基于原始连续采集和 selection seed 重放校验这些产物。
+
+### 4) 为什么全量导出会把“没有可导出 RD 产物的 manifest”也算进 `checked_manifests`？
 
 `checked_manifests` 表达的是“被扫描并尝试处理的 manifest 数”，而不是“产出文件的 manifest 数”。这能让全量跑批在日志里稳定表达扫描范围。
-

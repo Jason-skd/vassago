@@ -40,7 +40,7 @@ class RdArtifactExistsError(FileExistsError):
 
 
 @dataclass(slots=True, frozen=True)
-class _SelectedBackgroundWindow:
+class SelectedBackgroundWindow:
     """One selected fixed-duration window inside a background capture."""
 
     segment_id: str
@@ -51,7 +51,7 @@ class _SelectedBackgroundWindow:
 
 
 @dataclass(slots=True, frozen=True)
-class _BackgroundWindowSelection:
+class BackgroundWindowSelection:
     """Resolved background window-selection plan for one manifest."""
 
     window_duration_s: float
@@ -60,7 +60,7 @@ class _BackgroundWindowSelection:
     frame_period_s: float
     frames_per_window: int
     candidate_window_count: int
-    selected_windows: tuple[_SelectedBackgroundWindow, ...]
+    selected_windows: tuple[SelectedBackgroundWindow, ...]
 
 
 @dataclass(slots=True, frozen=True)
@@ -152,7 +152,7 @@ def extract_manifest_samples(
     output_path: Path | None = None,
     overwrite: bool = False,
 ) -> tuple[Path, ...]:
-    """Extract rd.npz for one or more accepted takes listed in one manifest."""
+    """Extract canonical rd.npz artifacts from one collection manifest."""
     resolved_manifest_path = resolve_repo_path(manifest_path)
     manifest = collection_session.load_manifest(resolved_manifest_path)
     collection_type = _require_str(manifest, "collection_type")
@@ -243,12 +243,12 @@ def _extract_background_manifest_samples(
     overwrite: bool,
 ) -> tuple[Path, ...]:
     """Extract seeded random background windows directly to rd.npz artifacts."""
-    raw_uart_path = _resolve_background_raw_uart_path(manifest)
+    raw_uart_path = resolve_background_raw_uart_path(manifest)
     capture = extract_rd_capture(
         input_path=raw_uart_path,
         config_path=config_path,
     )
-    selection = _select_background_windows(
+    selection = select_background_windows(
         capture=capture,
         manifest=manifest,
     )
@@ -347,7 +347,7 @@ def build_background_rd_npz_sample(
     *,
     capture: ExtractedRdCapture,
     manifest: JsonObject,
-    selected_window: _SelectedBackgroundWindow,
+    selected_window: SelectedBackgroundWindow,
 ) -> BackgroundRdNpzSample:
     """Build one background rd.npz sample from a selected slice window."""
     return BackgroundRdNpzSample(
@@ -420,11 +420,11 @@ def format_extract_summary(
     return "\n".join(lines)
 
 
-def _select_background_windows(
+def select_background_windows(
     *,
     capture: ExtractedRdCapture,
     manifest: JsonObject,
-) -> _BackgroundWindowSelection:
+) -> BackgroundWindowSelection:
     """Resolve the seeded random fixed windows selected from one background run."""
     background_plan = _require_dict(manifest, "background_plan")
     window_duration_s = _require_positive_float(background_plan, "window_duration_s")
@@ -470,7 +470,7 @@ def _select_background_windows(
         )
     )
     selected_windows = tuple(
-        _SelectedBackgroundWindow(
+        SelectedBackgroundWindow(
             segment_id=f"segment{offset:04d}",
             window_index=window_index,
             start_frame_index=window_index * frames_per_window,
@@ -482,7 +482,7 @@ def _select_background_windows(
         )
         for offset, window_index in enumerate(selected_indices, start=1)
     )
-    return _BackgroundWindowSelection(
+    return BackgroundWindowSelection(
         window_duration_s=window_duration_s,
         target_segment_count=target_segment_count,
         selection_seed=selection_seed,
@@ -515,7 +515,7 @@ def _resolve_frames_per_window(
     return int(rounded_ratio)
 
 
-def _resolve_background_raw_uart_path(manifest: JsonObject) -> Path:
+def resolve_background_raw_uart_path(manifest: JsonObject) -> Path:
     """Resolve the completed continuous raw capture recorded by a background session."""
     background_capture = _require_dict(manifest, "background_capture")
     status = _require_str(background_capture, "status")
