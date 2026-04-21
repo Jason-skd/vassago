@@ -116,7 +116,12 @@ def handle_init_session(  # noqa: PLR0913
     ] = None,
     gesture: Annotated[
         str | None,
-        typer.Option(help="Gesture selected from the collection profile."),
+        typer.Option(
+            help=(
+                "Gesture selected from the collection profile. "
+                "Required only for gesture sessions."
+            ),
+        ),
     ] = None,
     cli_port: Annotated[
         str | None,
@@ -167,10 +172,14 @@ def handle_init_session(  # noqa: PLR0913
         collection_type=collection_type,
         interactive=resolved_interactive,
     )
-    selected_gesture = _resolve_gesture(
-        gesture=gesture,
-        profile=profile,
-        interactive=resolved_interactive,
+    selected_gesture = (
+        _resolve_gesture(
+            gesture=gesture,
+            profile=profile,
+            interactive=resolved_interactive,
+        )
+        if selected_collection_type == collection_session.COLLECTION_TYPE_GESTURE
+        else None
     )
     selected_firmware_config_id = _resolve_firmware_config_id(
         value=firmware_config_id,

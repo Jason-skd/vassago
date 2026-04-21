@@ -326,7 +326,7 @@ push = 1.8
 - 含义：这轮采集允许的 gesture 清单。
 - 怎么填：只列出这轮真的要采的动作。
 - 约束：列表必须非空，元素不能重复。
-- 当前 manifest 契约：session 初始化时，这组列表会写到 manifest 顶层 `gesture_options`，最终实际选择的 `gesture` 也会单独写到顶层。
+- 当前 manifest 契约：session 初始化时，这组列表会写到 manifest 顶层 `gesture_options`；对于 `gesture` session，最终实际选择的 `gesture` 也会单独写到顶层。
 
 从当前 `src/vassago/collection/rd/config.py` 和 `src/vassago/collection/rd/cli.py` 来看，仓库目前没有对 gesture 做中央字典校验。也就是说，技术上它现在是“由 profile 自己定义的一组字符串”。
 
@@ -466,7 +466,8 @@ push = 1.8
 - `[defaults]`
   snapshot 保留默认值来源；操作员最终选定的实际 session 值写到 manifest 顶层
 - `[options]`
-  snapshot 保留来源列表；manifest 顶层额外暴露 `gesture_options`、`environment_options`，以及实际选择的 `gesture`、`environment`
+  snapshot 保留来源列表；manifest 顶层额外暴露 `gesture_options`、`environment_options`，以及实际选择的 `environment`
+  对 `gesture` session，还会额外暴露实际选择的 `gesture`
 - `[serial]`
   snapshot 保留完整 serial 默认值；如果某个 serial 字段被 downstream tooling 依赖，例如 `data_baudrate`，它也必须稳定出现在 manifest 顶层
 - `runtime.*` 与 `gesture_target_durations`

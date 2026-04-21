@@ -79,7 +79,7 @@ def render_sessions(
             summary.collection_type,
             summary.session_status,
             summary.subject_name,
-            summary.gesture,
+            summary.gesture or "-",
             str(summary.accepted_take_count),
             str(summary.remaining_take_count),
             str(summary.manifest_path),
@@ -106,7 +106,9 @@ def render_session_summary(
     table.add_row("session_status", str(manifest["session_status"]))
     table.add_row("collection_type", str(manifest.get("collection_type", "-")))
     table.add_row("subject_name", str(manifest["subject_name"]))
-    table.add_row("gesture", str(manifest["gesture"]))
+    gesture = _load_non_empty_string(manifest.get("gesture"), default="")
+    if gesture:
+        table.add_row("gesture", gesture)
     profile_config_id, default_firmware_config_id = _load_snapshot_summary_fields(
         manifest
     )

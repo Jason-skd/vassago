@@ -138,8 +138,6 @@ def test_collection_init_session_command_writes_background_manifest(tmp_path) ->
             "white_space",
             "--subject-name",
             "alice",
-            "--gesture",
-            profile.gestures[0],
             "--environment",
             profile.defaults.environment,
             "--operator-name",
@@ -166,6 +164,7 @@ def test_collection_init_session_command_writes_background_manifest(tmp_path) ->
     background_plan = manifest["background_plan"]
     background_capture = manifest["background_capture"]
     assert manifest["collection_type"] == collection_session.COLLECTION_TYPE_WHITE_SPACE
+    assert "gesture" not in manifest
     assert isinstance(background_plan, dict)
     assert background_plan["sample_ratio"] == 2.0
     assert background_plan["window_duration_s"] == 5.0
@@ -431,7 +430,7 @@ def test_run_session_records_background_capture_and_updates_manifest(
             note=None,
             radar_id="radar_01",
             firmware_id="fw_01",
-            gesture=profile.gestures[0],
+            gesture=None,
             firmware_config_id=profile.default_firmware_config_id,
             cli_port="/dev/cli",
             data_port="/dev/data",

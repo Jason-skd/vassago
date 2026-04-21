@@ -71,12 +71,12 @@ class SessionInitInput:
     note: str | None
     radar_id: str
     firmware_id: str
-    gesture: str
     firmware_config_id: str
     cli_port: str
     data_port: str
     data_baudrate: int
     collection_type: str = COLLECTION_TYPE_GESTURE
+    gesture: str | None = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -88,7 +88,7 @@ class SessionSummary:
     session_status: str
     collection_type: str
     subject_name: str
-    gesture: str
+    gesture: str | None
     accepted_take_count: int
     remaining_take_count: int
     updated_at: str
@@ -126,6 +126,10 @@ def build_session_manifest(
     profile = session_input.profile
     created_at = now.isoformat()
     collection_type = _require_collection_type(session_input.collection_type)
+    gesture = _resolve_session_gesture(
+        collection_type=collection_type,
+        gesture=session_input.gesture,
+    )
     companion_profile_id = profile.default_companion_profile_id
     background_plan = None
     background_capture = None
@@ -142,12 +146,12 @@ def build_session_manifest(
         background_capture = build_background_capture_record()
         takes = []
 
-    return {
+    manifest: JsonObject = {
         "schema_version": SESSION_SCHEMA_VERSION,
         "session_id": build_session_id(
             now=now,
             subject_name=session_input.subject_name,
-            gesture=session_input.gesture,
+            session_label=gesture or collection_type,
         ),
         "created_at": created_at,
         "updated_at": created_at,
@@ -166,7 +170,6 @@ def build_session_manifest(
         "companion_profile_id": companion_profile_id,
         "background_plan": background_plan,
         "background_capture": background_capture,
-        "gesture": session_input.gesture,
         "gesture_options": list(profile.gestures),
         "environment_options": list(profile.environments),
         "cli_port": session_input.cli_port,
@@ -175,6 +178,9 @@ def build_session_manifest(
         "config_snapshot": profile.as_snapshot(),
         "takes": takes,
     }
+    if gesture is not None:
+        manifest["gesture"] = gesture
+    return manifest
 
 
 def build_take_plan(
@@ -292,7 +298,7 @@ def list_unfinished_sessions(
                 session_status=session_status,
                 collection_type=_require_str(manifest, "collection_type"),
                 subject_name=_require_str(manifest, "subject_name"),
-                gesture=_require_str(manifest, "gesture"),
+                gesture=_optional_str(manifest, "gesture"),
                 accepted_take_count=count_accepted_takes(manifest),
                 remaining_take_count=count_remaining_takes(manifest),
                 updated_at=_require_str(manifest, "updated_at"),
@@ -344,7 +350,7 @@ def update_session_status(
     manifest["updated_at"] = (now or local_now()).isoformat()
 
 
-def accept_take(
+def accept_take(  # noqa: PLR0913
     *,
     manifest: JsonObject,
     take: JsonObject,
@@ -441,11 +447,12 @@ def build_session_id(
     *,
     now: datetime,
     subject_name: str,
-    gesture: str,
+    session_label: str,
 ) -> str:
     """Build a stable session identifier from the runtime inputs."""
     return (
-        f"{now.strftime('%Y%m%d_%H%M%S')}_{_slugify(subject_name)}_{_slugify(gesture)}"
+        f"{now.strftime('%Y%m%d_%H%M%S')}_{_slugify(subject_name)}_"
+        f"{_slugify(session_label)}"
     )
 
 
@@ -487,6 +494,29 @@ def _require_str(data: JsonObject, key: str) -> str:
         return value
 
     msg = f"Manifest field {key!r} must be a string."
+    raise ValueError(msg)
+
+
+def _optional_str(data: JsonObject, key: str) -> str | None:
+    """Return one optional non-empty string field if present."""
+    value = data.get(key)
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def _resolve_session_gesture(
+    *,
+    collection_type: str,
+    gesture: str | None,
+) -> str | None:
+    """Normalize the optional session gesture for one collection branch."""
+    if collection_type != COLLECTION_TYPE_GESTURE:
+        return None
+    if isinstance(gesture, str) and gesture:
+        return gesture
+
+    msg = "Gesture sessions require a non-empty gesture."
     raise ValueError(msg)
 
 

@@ -115,6 +115,7 @@ def test_run_metadata_qc_accepts_valid_background_manifest_contract(
         "recorded_bytes": None,
     }
     manifest["takes"] = []
+    manifest.pop("gesture")
 
     report = metadata_qc.run_metadata_qc(
         OfflineQcSessionContext(
@@ -124,6 +125,26 @@ def test_run_metadata_qc_accepts_valid_background_manifest_contract(
     )
 
     assert report.findings == ()
+
+
+def test_run_metadata_qc_requires_gesture_for_gesture_manifest(tmp_path) -> None:
+    manifest_path, manifest = _write_manifest(tmp_path)
+    manifest.pop("gesture")
+
+    report = metadata_qc.run_metadata_qc(
+        OfflineQcSessionContext(
+            manifest_path=manifest_path,
+            manifest=manifest,
+        )
+    )
+
+    assert tuple(
+        finding.code for finding in report.findings_for(severity=QC_SEVERITY_ERROR)
+    ) == (metadata_qc.CODE_BRANCH_CONTRACT_VIOLATION,)
+    assert tuple(
+        finding.field_path
+        for finding in report.findings_for(severity=QC_SEVERITY_ERROR)
+    ) == ("gesture",)
 
 
 def test_run_metadata_qc_accepts_legacy_manifest_after_loader_backfill(
@@ -475,6 +496,7 @@ def _write_background_manifest(
         marked_window=None,
     )
     manifest["collection_type"] = collection_session.COLLECTION_TYPE_WHITE_SPACE
+    manifest.pop("gesture")
     manifest["background_plan"] = {
         "sample_ratio": 2.0,
         "default_recording_duration_multiplier": 1.25,

@@ -153,7 +153,7 @@ def test_initialize_background_session_persists_derived_plan(tmp_path) -> None:
             note="background",
             radar_id="radar_01",
             firmware_id="fw_01",
-            gesture=profile.gestures[0],
+            gesture=None,
             firmware_config_id=profile.default_firmware_config_id,
             cli_port="/dev/cli",
             data_port="/dev/data",
@@ -173,6 +173,7 @@ def test_initialize_background_session_persists_derived_plan(tmp_path) -> None:
         loaded_manifest["collection_type"]
         == collection_session.COLLECTION_TYPE_NORMAL_ACTIVITY
     )
+    assert "gesture" not in loaded_manifest
     assert isinstance(background_plan, dict)
     assert background_plan["sample_ratio"] == 3.0
     assert background_plan["default_recording_duration_multiplier"] == 1.25
@@ -189,3 +190,38 @@ def test_initialize_background_session_persists_derived_plan(tmp_path) -> None:
     assert background_capture["status"] == "planned"
     assert background_capture["raw_uart_path"] is None
     assert takes == []
+
+
+def test_list_unfinished_sessions_allows_background_manifest_without_gesture(
+    tmp_path,
+) -> None:
+    profile = collection_config.get_collection_profile("rd_phase1_default")
+    collection_session.initialize_session(
+        session_input=collection_session.SessionInitInput(
+            profile=profile,
+            subject_name="alice",
+            hand="right",
+            distance_m=0.5,
+            angle_deg=0.0,
+            environment=profile.defaults.environment,
+            operator_name="operator_a",
+            note="background",
+            radar_id="radar_01",
+            firmware_id="fw_01",
+            gesture=None,
+            firmware_config_id=profile.default_firmware_config_id,
+            cli_port="/dev/cli",
+            data_port="/dev/data",
+            data_baudrate=921_600,
+            collection_type=collection_session.COLLECTION_TYPE_WHITE_SPACE,
+        ),
+        sessions_root=tmp_path,
+    )
+
+    summaries = collection_session.list_unfinished_sessions(sessions_root=tmp_path)
+
+    assert len(summaries) == 1
+    assert (
+        summaries[0].collection_type == collection_session.COLLECTION_TYPE_WHITE_SPACE
+    )
+    assert summaries[0].gesture is None

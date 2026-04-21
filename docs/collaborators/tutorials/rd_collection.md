@@ -91,9 +91,12 @@ uv run vassago collection rd init-session
 
 - 交互模式下，`operator_name` 必须手动输入，不会自动带默认值
 - `gesture`、`environment` 不是自由输入，而是从 profile 里选择
+  - 但 `white_space` 这类 background session 不要求选择 `gesture`
 - firmware cfg 也会先给你一个受管 `config_id` 列表；当前 `rd_phase1_default` 默认高亮的是 `rd_pointcloud_dual`
 - session 创建成功后，会生成一个 `manifest.json`
-- `manifest.json` 顶层会直接写入本次 session 的公共字段，例如 `collection_type`、`gesture`、`firmware_config_id`、`gesture_options`、`environment_options`、串口信息
+- `manifest.json` 顶层会直接写入本次 session 的公共字段，例如 `collection_type`、`firmware_config_id`、`gesture_options`、`environment_options`、串口信息
+  - 对 `gesture` session，会额外写入实际选择的 `gesture`
+  - 对 `white_space` / background session，则不会再要求或写入顶层 `gesture`
 - `config_snapshot` 会同时保留本次生效 collection config 的完整镜像，供后续追溯和离线 QC 使用
 
 ### 3.1 空背景采集（white_space）怎么创建
@@ -115,7 +118,6 @@ uv run vassago collection rd init-session \
   --config-id rd_phase1_default \
   --collection-type white_space \
   --subject-name skd \
-  --gesture wave \
   --environment office_lab \
   --operator-name your_name \
   --radar-id rd_aop_01 \
@@ -127,7 +129,7 @@ uv run vassago collection rd init-session \
 
 说明：
 
-- 目前 `collection_type` 影响的是“运行时采集策略”，而不是 `gesture/environment` 这类顶层公共字段的存在与否
+- `white_space` / background session 不再要求选择 `gesture`
 - `white_space` 要求尽量保持无人/无目标活动，以便形成稳定底噪背景数据
 
 如果你已经知道所有参数，也可以用非交互模式：

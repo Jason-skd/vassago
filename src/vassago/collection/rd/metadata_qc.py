@@ -429,6 +429,15 @@ def _check_collection_type_branch_contract(manifest: JsonObject) -> list[QcFindi
 
 def _check_gesture_branch_contract(manifest: JsonObject) -> list[QcFinding]:
     findings: list[QcFinding] = []
+    gesture_spec = TOP_LEVEL_FIELD_SPECS["gesture"]
+    if not gesture_spec.validator(manifest.get("gesture")):
+        findings.append(
+            _error(
+                CODE_BRANCH_CONTRACT_VIOLATION,
+                "gesture sessions require a non-empty gesture.",
+                field_path="gesture",
+            )
+        )
     if manifest.get("background_plan") is not None:
         findings.append(
             _error(

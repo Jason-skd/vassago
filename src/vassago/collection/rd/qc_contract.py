@@ -44,7 +44,6 @@ MANIFEST_TOP_LEVEL_EXTRACT_FIELDS = (
     "companion_profile_id",
     "background_plan",
     "background_capture",
-    "gesture",
     "gesture_options",
     "environment_options",
     "cli_port",
@@ -63,7 +62,6 @@ MANIFEST_TOP_LEVEL_SELECTION_FIELDS = (
     "firmware_id",
     "firmware_config_id",
     "companion_profile_id",
-    "gesture",
 )
 
 MANIFEST_TOP_LEVEL_OPTION_FIELDS = (
