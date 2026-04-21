@@ -55,6 +55,68 @@ def test_infer_port_roles_prefers_unique_cli_and_busiest_data_port() -> None:
     assert data_port == "/dev/cu.SLAB_USBtoUART6"
 
 
+def test_infer_port_roles_prefers_slab_alias_when_driver_exposes_duplicates() -> None:
+    cli_port, data_port = infer_port_roles(
+        [
+            PortProbeResult(
+                port="/dev/cu.SLAB_USBtoUART",
+                description="DATA alias A",
+                cli_prompt_seen=False,
+                cli_response_lines=(),
+                data_bytes_read=0,
+                valid_packet_count=0,
+                invalid_packet_count=0,
+                serial_number="008ACB32",
+                location="1-1.2",
+                vid=0x10C4,
+                pid=0xEA70,
+            ),
+            PortProbeResult(
+                port="/dev/cu.SLAB_USBtoUART4",
+                description="CLI alias A",
+                cli_prompt_seen=True,
+                cli_response_lines=("mmwDemo:/>",),
+                data_bytes_read=0,
+                valid_packet_count=0,
+                invalid_packet_count=0,
+                serial_number="008ACB32",
+                location="1-1.2",
+                vid=0x10C4,
+                pid=0xEA70,
+            ),
+            PortProbeResult(
+                port="/dev/cu.usbserial-008ACB320",
+                description="CLI alias B",
+                cli_prompt_seen=True,
+                cli_response_lines=("mmwDemo:/>",),
+                data_bytes_read=0,
+                valid_packet_count=0,
+                invalid_packet_count=0,
+                serial_number="008ACB32",
+                location="1-1.2",
+                vid=0x10C4,
+                pid=0xEA70,
+            ),
+            PortProbeResult(
+                port="/dev/cu.usbserial-008ACB321",
+                description="DATA alias B",
+                cli_prompt_seen=False,
+                cli_response_lines=(),
+                data_bytes_read=0,
+                valid_packet_count=0,
+                invalid_packet_count=0,
+                serial_number="008ACB32",
+                location="1-1.2",
+                vid=0x10C4,
+                pid=0xEA70,
+            ),
+        ],
+    )
+
+    assert cli_port == "/dev/cu.SLAB_USBtoUART4"
+    assert data_port == "/dev/cu.SLAB_USBtoUART"
+
+
 def test_build_recovery_hint_special_cases_sensor_start() -> None:
     assert "baseline cfg" in build_recovery_hint(failed_command="sensorStart")
     assert "probe-ports" in build_recovery_hint()

@@ -34,6 +34,8 @@ DEFAULT_CLI_COMMAND_TIMEOUT_SECONDS = 1.0
 DEFAULT_CLI_READY_TIMEOUT_SECONDS = 4.0
 DEFAULT_CLI_READY_RETRIES = 3
 FIRST_HEXDUMP_MIN_BYTES = 30
+MIN_DUPLICATE_ALIAS_COUNT = 2
+type PhysicalDeviceKey = tuple[int | None, int | None, str | None, str | None]
 
 
 @dataclass(slots=True, frozen=True)
@@ -87,6 +89,24 @@ class PortProbeResult:
     data_bytes_read: int
     valid_packet_count: int
     invalid_packet_count: int
+    serial_number: str | None = None
+    location: str | None = None
+    vid: int | None = None
+    pid: int | None = None
+
+    @property
+    def physical_device_key(
+        self,
+    ) -> PhysicalDeviceKey | None:
+        """Return the USB identity when the port metadata includes one."""
+        if (
+            self.vid is None
+            and self.pid is None
+            and self.serial_number is None
+            and self.location is None
+        ):
+            return None
+        return (self.vid, self.pid, self.serial_number, self.location)
 
 
 def load_config_lines(config_path: Path) -> list[str]:
@@ -242,6 +262,10 @@ def probe_port(
         data_bytes_read=summary.bytes_read,
         valid_packet_count=summary.valid_packet_count,
         invalid_packet_count=summary.invalid_packet_count,
+        serial_number=port.serial_number,
+        location=port.location,
+        vid=port.vid,
+        pid=port.pid,
     )
 
 
@@ -276,16 +300,22 @@ def infer_port_roles(
 ) -> tuple[str | None, str | None]:
     """Infer likely CLI and Data ports from probe observations."""
     results = list(probe_results)
-    cli_candidates = [result.port for result in results if result.cli_prompt_seen]
-    cli_port = cli_candidates[0] if len(cli_candidates) == 1 else None
+    cli_results = [result for result in results if result.cli_prompt_seen]
+    if len(cli_results) == 1:
+        cli_port = cli_results[0].port
+    elif _results_share_one_physical_device(cli_results):
+        cli_port = _pick_preferred_alias(cli_results)
+    else:
+        cli_port = None
 
     data_candidates = [
-        result.port
+        result
         for result in sorted(
             results,
             key=lambda result: (
                 result.valid_packet_count,
                 result.data_bytes_read,
+                -_port_alias_rank(result.port),
             ),
             reverse=True,
         )
@@ -293,14 +323,54 @@ def infer_port_roles(
     ]
 
     if data_candidates:
-        return cli_port, data_candidates[0]
+        return cli_port, data_candidates[0].port
 
     if cli_port is not None:
-        remaining_ports = [result.port for result in results if result.port != cli_port]
-        if len(remaining_ports) == 1:
-            return cli_port, remaining_ports[0]
+        remaining_non_cli_results = [
+            result
+            for result in results
+            if result.port != cli_port and not result.cli_prompt_seen
+        ]
+        if len(remaining_non_cli_results) == 1:
+            return cli_port, remaining_non_cli_results[0].port
+        if _results_share_one_physical_device(remaining_non_cli_results):
+            return cli_port, _pick_preferred_alias(remaining_non_cli_results)
 
     return cli_port, None
+
+
+def _results_share_one_physical_device(results: Sequence[PortProbeResult]) -> bool:
+    """Return whether all results map to one USB bridge identity."""
+    if len(results) < MIN_DUPLICATE_ALIAS_COUNT:
+        return False
+
+    keys = {
+        result.physical_device_key
+        for result in results
+        if result.physical_device_key is not None
+    }
+    return len(keys) == 1
+
+
+def _pick_preferred_alias(results: Sequence[PortProbeResult]) -> str:
+    """Choose the most stable device node among duplicate aliases."""
+    return min(
+        (result.port for result in results),
+        key=lambda port: (_port_alias_rank(port), port),
+    )
+
+
+def _port_alias_rank(port: str) -> int:
+    """Prefer call-out nodes from the Silicon Labs driver on macOS."""
+    if port.startswith("/dev/cu.SLAB_USBtoUART"):
+        return 0
+    if port.startswith("/dev/tty.SLAB_USBtoUART"):
+        return 1
+    if port.startswith("/dev/cu.usbserial-"):
+        return 2
+    if port.startswith("/dev/tty.usbserial-"):
+        return 3
+    return 10
 
 
 def validate_cli_session(session: CliSessionResult) -> None:

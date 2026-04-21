@@ -6,6 +6,8 @@ from dataclasses import dataclass
 
 from serial.tools import list_ports
 
+type PhysicalDeviceKey = tuple[int | None, int | None, str | None, str | None]
+
 
 @dataclass(slots=True, frozen=True)
 class SerialPortInfo:
@@ -14,12 +16,32 @@ class SerialPortInfo:
     device: str
     description: str
     manufacturer: str | None
+    product: str | None = None
+    serial_number: str | None = None
+    location: str | None = None
+    vid: int | None = None
+    pid: int | None = None
 
     @property
     def search_blob(self) -> str:
         """Return one normalized string used for candidate matching."""
         manufacturer = self.manufacturer or ""
-        return f"{self.description} {manufacturer}".lower()
+        product = self.product or ""
+        return f"{self.description} {manufacturer} {product}".lower()
+
+    @property
+    def physical_device_key(
+        self,
+    ) -> PhysicalDeviceKey | None:
+        """Return a stable USB identity when the host exposes one."""
+        if (
+            self.vid is None
+            and self.pid is None
+            and self.serial_number is None
+            and self.location is None
+        ):
+            return None
+        return (self.vid, self.pid, self.serial_number, self.location)
 
 
 def list_serial_ports() -> list[SerialPortInfo]:
@@ -30,6 +52,11 @@ def list_serial_ports() -> list[SerialPortInfo]:
                 device=port.device,
                 description=port.description or "unknown",
                 manufacturer=port.manufacturer,
+                product=getattr(port, "product", None),
+                serial_number=getattr(port, "serial_number", None),
+                location=getattr(port, "location", None),
+                vid=getattr(port, "vid", None),
+                pid=getattr(port, "pid", None),
             )
             for port in list_ports.comports()
         ],
