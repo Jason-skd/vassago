@@ -32,6 +32,9 @@ type JsonObject = dict[str, object]
 CODE_MANIFEST_LOAD_ERROR = "manifest_load_error"
 CODE_MISSING_REPLAY_INPUT = "missing_replay_input"
 CODE_RAW_UART_NOT_FOUND = "raw_uart_artifact_not_found"
+CODE_BACKGROUND_CAPTURE_NOT_COMPLETED = "background_capture_not_completed"
+CODE_BACKGROUND_CAPTURE_SIZE_MISMATCH = "background_capture_size_mismatch"
+CODE_EMPTY_BACKGROUND_CAPTURE = "empty_background_capture"
 
 
 @dataclass(slots=True, frozen=True)
@@ -120,7 +123,20 @@ def run_offline_qc_context(
 
 
 def run_offline_quick_qc(context: OfflineQcSessionContext) -> QcReport:
-    """Replay live quick-QC on accepted takes from one persisted manifest."""
+    """Replay gesture quick-QC or validate background raw capture artifacts."""
+    collection_type = context.manifest.get("collection_type")
+    if collection_type == collection_session.COLLECTION_TYPE_GESTURE:
+        return _run_offline_take_quick_qc(context)
+    if collection_type in {
+        collection_session.COLLECTION_TYPE_NORMAL_ACTIVITY,
+        collection_session.COLLECTION_TYPE_WHITE_SPACE,
+    }:
+        return _run_offline_background_capture_qc(context)
+    return QcReport.empty()
+
+
+def _run_offline_take_quick_qc(context: OfflineQcSessionContext) -> QcReport:
+    """Replay live quick-QC on accepted gesture takes from one manifest."""
     raw_takes = context.manifest.get("takes")
     if not isinstance(raw_takes, list):
         return QcReport.empty()
@@ -136,6 +152,84 @@ def run_offline_quick_qc(context: OfflineQcSessionContext) -> QcReport:
             _replay_quick_qc_for_take(
                 take=raw_take,
                 marked_window_end_grace_s=grace_s,
+            )
+        )
+
+    return QcReport.from_findings(findings)
+
+
+def _run_offline_background_capture_qc(context: OfflineQcSessionContext) -> QcReport:
+    """Validate the persisted raw artifact for one background session."""
+    raw_background_capture = context.manifest.get("background_capture")
+    if not isinstance(raw_background_capture, dict):
+        return QcReport.empty()
+
+    findings: list[QcFinding] = []
+    raw_status = raw_background_capture.get("status")
+    if raw_status != collection_session.BACKGROUND_CAPTURE_STATUS_COMPLETED:
+        return QcReport.from_findings(
+            [
+                _offline_error(
+                    CODE_BACKGROUND_CAPTURE_NOT_COMPLETED,
+                    (
+                        "background session must finish with "
+                        "background_capture.status='completed' before offline QC."
+                    ),
+                    field_path="background_capture.status",
+                )
+            ]
+        )
+
+    raw_uart_path = raw_background_capture.get("raw_uart_path")
+    if not isinstance(raw_uart_path, str) or not raw_uart_path:
+        return QcReport.from_findings(
+            [
+                _offline_error(
+                    CODE_MISSING_REPLAY_INPUT,
+                    (
+                        "background_capture.raw_uart_path is required to validate "
+                        "the continuous raw artifact."
+                    ),
+                    field_path="background_capture.raw_uart_path",
+                )
+            ]
+        )
+
+    resolved_raw_uart_path = resolve_repo_path(raw_uart_path)
+    if not resolved_raw_uart_path.is_file():
+        return QcReport.from_findings(
+            [
+                _offline_error(
+                    CODE_RAW_UART_NOT_FOUND,
+                    (
+                        "background raw_uart artifact was not found: "
+                        f"{resolved_raw_uart_path}"
+                    ),
+                    field_path="background_capture.raw_uart_path",
+                )
+            ]
+        )
+
+    file_size = resolved_raw_uart_path.stat().st_size
+    if file_size == 0:
+        findings.append(
+            _offline_error(
+                CODE_EMPTY_BACKGROUND_CAPTURE,
+                "background raw_uart artifact must not be empty.",
+                field_path="background_capture.raw_uart_path",
+            )
+        )
+
+    recorded_bytes = raw_background_capture.get("recorded_bytes")
+    if _is_non_negative_int(recorded_bytes) and file_size != recorded_bytes:
+        findings.append(
+            _offline_error(
+                CODE_BACKGROUND_CAPTURE_SIZE_MISMATCH,
+                (
+                    "background_capture.recorded_bytes does not match the "
+                    f"artifact size on disk ({recorded_bytes} != {file_size})."
+                ),
+                field_path="background_capture.recorded_bytes",
             )
         )
 
@@ -269,6 +363,10 @@ def _is_number(value: object) -> TypeGuard[int | float]:
     return isinstance(value, int | float) and not isinstance(value, bool)
 
 
+def _is_non_negative_int(value: object) -> TypeGuard[int]:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
 def _take_id_or_none(take: JsonObject) -> str | None:
     raw_take_id = take.get("take_id")
     return raw_take_id if isinstance(raw_take_id, str) and raw_take_id else None
@@ -289,12 +387,18 @@ def _with_take_id(finding: QcFinding, *, take_id: str | None) -> QcFinding:
     return replace(finding, take_id=take_id)
 
 
-def _offline_error(code: str, message: str) -> QcFinding:
+def _offline_error(
+    code: str,
+    message: str,
+    *,
+    field_path: str | None = None,
+) -> QcFinding:
     return QcFinding(
         plugin=QC_PLUGIN_OFFLINE,
         severity=QC_SEVERITY_ERROR,
         code=code,
         message=message,
+        field_path=field_path,
     )
 
 

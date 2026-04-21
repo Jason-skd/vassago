@@ -180,6 +180,56 @@ def test_run_offline_qc_surfaces_quick_qc_findings_per_take(tmp_path) -> None:
     )
 
 
+def test_run_offline_qc_accepts_completed_background_capture(tmp_path) -> None:
+    manifest_path, _manifest = _write_background_manifest(tmp_path)
+
+    report = offline_qc.run_offline_qc(manifest_path=manifest_path)
+
+    assert report.findings == ()
+    assert report.has_errors is False
+
+
+def test_run_offline_qc_requires_completed_background_capture(tmp_path) -> None:
+    manifest_path, manifest = _write_background_manifest(tmp_path)
+    background_capture = manifest["background_capture"]
+    assert isinstance(background_capture, dict)
+    background_capture["status"] = collection_session.BACKGROUND_CAPTURE_STATUS_PLANNED
+    background_capture["raw_uart_path"] = None
+    background_capture["completed_at"] = None
+    background_capture["recording_duration_s"] = None
+    background_capture["recorded_bytes"] = None
+    collection_session.write_manifest(manifest_path=manifest_path, manifest=manifest)
+
+    report = offline_qc.run_offline_qc(manifest_path=manifest_path)
+
+    assert tuple(finding.plugin for finding in report.findings) == (QC_PLUGIN_OFFLINE,)
+    assert tuple(finding.code for finding in report.findings) == (
+        offline_qc.CODE_BACKGROUND_CAPTURE_NOT_COMPLETED,
+    )
+    assert tuple(finding.field_path for finding in report.findings) == (
+        "background_capture.status",
+    )
+
+
+def test_run_offline_qc_surfaces_background_capture_size_mismatch(tmp_path) -> None:
+    manifest_path, manifest = _write_background_manifest(
+        tmp_path,
+        raw_capture=b"abcdef",
+        recorded_bytes=5,
+    )
+    collection_session.write_manifest(manifest_path=manifest_path, manifest=manifest)
+
+    report = offline_qc.run_offline_qc(manifest_path=manifest_path)
+
+    assert tuple(finding.plugin for finding in report.findings) == (QC_PLUGIN_OFFLINE,)
+    assert tuple(finding.code for finding in report.findings) == (
+        offline_qc.CODE_BACKGROUND_CAPTURE_SIZE_MISMATCH,
+    )
+    assert tuple(finding.field_path for finding in report.findings) == (
+        "background_capture.recorded_bytes",
+    )
+
+
 def test_run_offline_qc_all_returns_empty_report_when_sessions_root_is_missing(
     tmp_path,
 ) -> None:
@@ -299,6 +349,50 @@ def _write_manifest(
         raw_uart_path=raw_uart_path,
         marked_window=resolved_marked_window,
     )
+    manifest_path = tmp_path / "manifest.json"
+    collection_session.write_manifest(manifest_path=manifest_path, manifest=manifest)
+    return manifest_path, manifest
+
+
+def _write_background_manifest(
+    tmp_path: Path,
+    *,
+    raw_capture: bytes = b"abcdef",
+    recorded_bytes: int | None = None,
+) -> tuple[Path, dict[str, object]]:
+    background_dir = tmp_path / "background"
+    background_dir.mkdir(parents=True, exist_ok=True)
+    raw_uart_path = background_dir / collection_session.BACKGROUND_RAW_UART_FILENAME
+    raw_uart_path.write_bytes(raw_capture)
+
+    manifest = _build_valid_manifest(
+        raw_uart_path=raw_uart_path,
+        marked_window=None,
+    )
+    manifest["collection_type"] = collection_session.COLLECTION_TYPE_WHITE_SPACE
+    manifest["background_plan"] = {
+        "sample_ratio": 2.0,
+        "default_recording_duration_multiplier": 1.25,
+        "window_duration_s": 5.0,
+        "target_segment_count": 2,
+        "planned_recording_duration_s": 12.5,
+        "selection_policy": "random_after_capture",
+        "save_policy": "keep_full_capture",
+        "selection_seed": 7,
+    }
+    manifest["background_capture"] = {
+        "status": collection_session.BACKGROUND_CAPTURE_STATUS_COMPLETED,
+        "raw_uart_path": str(raw_uart_path),
+        "started_at": "2026-04-12T09:00:00+08:00",
+        "completed_at": "2026-04-12T09:00:12+08:00",
+        "interrupted_at": None,
+        "recording_duration_s": 12.5,
+        "recorded_bytes": len(raw_capture)
+        if recorded_bytes is None
+        else recorded_bytes,
+    }
+    manifest["takes"] = []
+
     manifest_path = tmp_path / "manifest.json"
     collection_session.write_manifest(manifest_path=manifest_path, manifest=manifest)
     return manifest_path, manifest
