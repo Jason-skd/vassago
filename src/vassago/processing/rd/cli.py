@@ -51,11 +51,11 @@ def handle_extract(
             output_path=output,
             overwrite=overwrite,
         )
-    except ValueError as exc:
+    except (KeyError, ValueError) as exc:
         raise typer.BadParameter(str(exc)) from exc
 
     if not output_paths:
-        console.print("No accepted takes with raw_uart.bin were found in the manifest.")
+        console.print("No extractable RD artifacts were found in the manifest.")
         raise typer.Exit(code=1)
 
     console.print("RD extract summary")
