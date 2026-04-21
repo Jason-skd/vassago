@@ -32,6 +32,6 @@
 - [processing-rd-extract-command-guide.md](processing-rd-extract-command-guide.md)
   `raw_uart.bin -> rd.npz` 的离线导出命令指南，覆盖 `extract` 与 `extract-all`。
 - [collection-toml-authoring.md](collection-toml-authoring.md)
-  RD collection profile TOML 编写说明书。
+  RD collection profile TOML 编写说明书，覆盖 `default_companion_profile_id` 与 profile/runtime 字段边界。
 
 RD collection QC 的使用说明只维护 collaborators 版本，见 [../../collaborators/tutorials/rd_collection_qc.md](../../collaborators/tutorials/rd_collection_qc.md)。

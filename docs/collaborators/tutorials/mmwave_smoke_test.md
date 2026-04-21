@@ -24,7 +24,7 @@
 - `rd_pointcloud_dual`
   风险较高的双输出配置，对应 [../../../configs/firmware/mmwave/rd_pointcloud_dual.cfg](../../../configs/firmware/mmwave/rd_pointcloud_dual.cfg)
 
-如果你只是要先确认板卡、固件和串口链路是否正常，仍然建议先从 `baseline_pointcloud` 开始。当前 RD collection 默认 profile 会绑定 `rd_pointcloud_dual`，但它不是 bring-up 的首选基线。
+如果你只是要先确认板卡、固件和串口链路是否正常，仍然建议先从 `baseline_pointcloud` 开始。当前 RD collection 默认 profile 现在会默认高亮 `rd_candidate`，但它仍然不是 bring-up 的首选基线。
 
 ## 2. 推荐操作流程
 

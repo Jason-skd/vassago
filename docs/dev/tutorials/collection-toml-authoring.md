@@ -9,8 +9,10 @@
 
 - `configs/collection/rd/templates/rd_template.toml`
 - `configs/collection/rd/global.toml`
+- `configs/collection/rd/companions/rd_background_default.toml`
 - `configs/collection/rd/profiles/rd_phase1_default.toml`
 - `src/vassago/collection/rd/config.py`
+- `src/vassago/collection/rd/session.py`
 
 如果旧文档和本文冲突，以本文为准。
 
@@ -18,12 +20,13 @@
 
 一份 RD collection profile 不是固件命令文件，也不是采集结果。你可以把它理解成“一张本轮采集意图卡”。
 
-它主要回答 4 个问题：
+它主要回答 5 个问题：
 
 1. 这份配置叫什么，给谁看
 2. 它继承哪份仓库级默认值
-3. 它绑定哪份 mmWave `.cfg`
-4. 这轮要采什么、默认怎么填、每个动作预计持续多久
+3. 它默认绑定哪份 background companion policy
+4. 它绑定哪份 mmWave `.cfg`
+5. 这轮要采什么、默认怎么填、每个动作预计持续多久
 
 它不负责描述的内容包括：
 
@@ -41,22 +44,24 @@
 - 其中 manifest 顶层是 downstream tooling 直接消费的公共 contract
 - `config_snapshot` 是一比一复制生效 config 的 provenance snapshot
 
-## 2. 写之前，先准备这 5 个答案
+## 2. 写之前，先准备这 6 个答案
 
 开始写之前，先想清楚：
 
 1. 这份 profile 的稳定名字是什么
 2. 它继承哪份 global baseline
-3. 它要绑定哪份 mmWave cfg
-4. 这轮准备采哪些 gesture / environment
-5. 这轮最终想拿到多少个 accepted take，每个 gesture 大概持续多久
+3. 它默认绑定哪份 companion profile
+4. 它要绑定哪份 mmWave cfg
+5. 这轮准备采哪些 gesture / environment
+6. 这轮最终想拿到多少个 accepted take，每个 gesture 大概持续多久
 
 如果你不知道这些答案从哪里找，按这个顺序看：
 
 1. 先复制模板：`configs/collection/rd/templates/rd_template.toml`
 2. 再看当前 global：`configs/collection/rd/global.toml`
-3. 再看目标 cfg 的文件头：`configs/firmware/mmwave/*.cfg`
-4. 最后参考现有 profile：`configs/collection/rd/profiles/rd_phase1_default.toml`
+3. 再看当前 companion：`configs/collection/rd/companions/*.toml`
+4. 再看目标 cfg 的文件头：`configs/firmware/mmwave/*.cfg`
+5. 最后参考现有 profile：`configs/collection/rd/profiles/rd_phase1_default.toml`
 
 大多数时候，你真正需要自己决定的字段只有：
 
@@ -64,6 +69,7 @@
 - `label`
 - `description`
 - `batch_size`
+- `default_companion_profile_id`
 - `defaults.firmware_config_id`
 - `[defaults]`
 - `[options]`
@@ -85,9 +91,10 @@
 1. 复制 `configs/collection/rd/templates/rd_template.toml`
 2. 改文件头元数据
 3. 填 `global.config_id`
-4. 填 `defaults.firmware_config_id`
-5. 填 `[defaults]`、`[options]`、`[gesture_target_durations]`
-6. 除非你非常明确知道为什么要覆盖 global，否则不要加运行时 override
+4. 确认 `default_companion_profile_id`
+5. 填 `defaults.firmware_config_id`
+6. 填 `[defaults]`、`[options]`、`[gesture_target_durations]`
+7. 除非你非常明确知道为什么要覆盖 global，否则不要加运行时 override
 
 一个典型 profile 会长这样：
 
@@ -101,6 +108,7 @@
 # ---
 schema_version = "collection_rd_profile_v3"
 batch_size = 12
+default_companion_profile_id = "rd_background_default"
 
 [global]
 config_id = "rd_global_default"
@@ -112,7 +120,7 @@ angle_deg = 0.0
 environment = "meeting_room"
 radar_id = "rd_aop_01"
 firmware_id = "rd_phase1_uart"
-firmware_config_id = "rd_pointcloud_dual"
+firmware_config_id = "rd_candidate"
 
 [options]
 gestures = ["swipe_left", "swipe_right", "push"]
@@ -193,12 +201,23 @@ push = 1.8
 - 大多数情况下怎么做：如果你没有在做全局基线分叉，直接填 `rd_global_default`。
 - 不要做：不要写文件路径，不要把 global 的字段整段复制进 profile 只是为了“看起来完整”。
 
-#### `defaults.firmware_config_id`
+### 4.4 `default_companion_profile_id`
+
+- 含义：给这份 profile 绑定一份默认 background companion policy。
+- 怎么填：填 `configs/collection/rd/companions/*.toml` 中某个 active companion profile 的 `config_id`。
+- 去哪里找：看 `configs/collection/rd/companions/` 的文件头元数据。当前仓库默认是 `rd_background_default`。
+- 运行时作用：
+  - `gesture` session 会把它写进 manifest 顶层 `companion_profile_id`，用于后续 provenance 和契约对照
+  - `normal_activity` / `white_space` session 会进一步根据它展开 `background_plan`
+
+如果你没有明确要切换背景采样策略，大多数时候直接沿用 `rd_background_default`。
+
+### 4.5 `defaults.firmware_config_id`
 
 - 含义：给 session 初始化时的 firmware cfg 方向键列表提供一个默认选中值。
 - 怎么填：填你希望默认高亮的 cfg `config_id`。
 - 去哪里找：看 `configs/firmware/mmwave/*.cfg` 文件头。当前仓库里能看到的例子包括 `rd_candidate`、`rd_pointcloud_dual` 和 `baseline_pointcloud`。
-- 怎么选：如果这轮通常跑点云 + RD 双采集，就把双采集 cfg 设成默认；如果串口链路更脆弱，就把更保守的 cfg 设成默认。
+- 怎么选：如果这轮优先追求更稳的 UART 采集默认路径，可以像当前 `rd_phase1_default` 一样先选 `rd_candidate`；如果你明确需要双输出可视化，再考虑 `rd_pointcloud_dual`。
 - 不要做：不要写 `config_path`，也不要写磁盘路径。
 
 运行时行为：
@@ -217,7 +236,7 @@ push = 1.8
 
 这两个字段不是一回事。
 
-### 4.5 顶层运行时 override
+### 4.6 顶层运行时 override
 
 下面这些字段可以直接写在顶层正文里：
 
@@ -251,7 +270,7 @@ push = 1.8
 - 含义：操作员用于标记动作结束的按键。
 - 怎么填：通常沿用 global 默认值。当前默认值是 `space`。
 
-### 4.6 `[serial]`（可选）
+### 4.7 `[serial]`（可选）
 
 这一段用于覆盖串口相关默认值。根据当前加载器，profile 级别支持：
 
@@ -274,7 +293,7 @@ push = 1.8
 - 怎么填：共享仓库里的 profile 通常不建议写，因为端口名往往是“某台电脑本地”的，不是 profile 本身的一部分。
 - 什么时候可以写：只有在固定实验台、固定设备映射、团队明确接受这种耦合时，才考虑写默认端口。
 
-### 4.7 `[defaults]`
+### 4.8 `[defaults]`
 
 这一段经常被误解。它不是“硬性锁死的真实值”，而是“CLI 创建 session 时给操作员的默认值”。如果操作员改了，最终写进 manifest 的是解析后的实际值。
 
@@ -317,7 +336,7 @@ push = 1.8
 - 怎么填：写人类可读的固件版本、构建名或阶段名，例如 `rd_phase1_uart`、`fw_20260411_candidate`。
 - 再次强调：这里不是 mmWave cfg 的 `config_id`。
 
-### 4.8 `[options]`
+### 4.9 `[options]`
 
 这一段描述“这轮允许选什么”。
 
@@ -345,7 +364,7 @@ push = 1.8
 
 从当前实现看，它和 `gestures` 一样，也还没有仓库级中央枚举；但为了后续数据一致性，应该尽量复用已有命名。
 
-### 4.9 `[gesture_target_durations]`
+### 4.10 `[gesture_target_durations]`
 
 这是 profile 里最容易“看懂字段名，但不知道怎么填”的部分。
 
@@ -431,6 +450,12 @@ push = 1.8
 - profile 顶层 override 是这轮故意偏离全局默认时的局部覆盖。
 - 经验建议：能继承就继承，只有这轮真的需要特立独行时才覆盖。
 
+### `default_companion_profile_id` vs `background_plan`
+
+- `default_companion_profile_id` 是 profile 作者阶段决定的默认 background 策略绑定。
+- `background_plan` 是 session 初始化时根据 profile、global 和 companion 计算出来的运行时结果，最终写进 manifest。
+- 不要试图在 profile TOML 里手写 `background_plan.*`；那属于 manifest 运行时产物，不属于 profile 作者边界。
+
 ### `[defaults]` vs `[options]`
 
 - `[defaults]` 是交互默认值。
@@ -463,6 +488,8 @@ push = 1.8
   只保留在 `config_snapshot.config_id`；如果界面要展示，应明确标成 `profile_config_id`
 - `defaults.firmware_config_id`
   是 profile 默认 cfg；本次 session 最终选中的结果会写到 manifest 顶层 `firmware_config_id`，而 `config_snapshot.defaults.firmware_config_id` 保留默认 baseline
+- `default_companion_profile_id`
+  只保留在 `config_snapshot.default_companion_profile_id`，同时 session 顶层会暴露实际绑定的 `companion_profile_id`；background session 还会额外展开 `background_plan`
 - `[defaults]`
   snapshot 保留默认值来源；操作员最终选定的实际 session 值写到 manifest 顶层
 - `[options]`

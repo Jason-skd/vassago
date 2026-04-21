@@ -16,7 +16,8 @@ Vassago 是一个面向高精度、高鲁棒性微动手势边缘 AI 识别的�
 
 - repo-managed `configs/` 目录树
 - mmWave `list-ports / probe-ports / smoke-test`
-- RD `collection` profile 加载、session manifest 与可恢复采集流程
+- RD `collection` profile / companion profile、session manifest 与可恢复采集流程
+- `processing rd extract / extract-all` 离线导出链路
 - 面向开发者与协作者的双层文档系统
 
 仍然在持续迭代，但已经不是“只有骨架”的状态。
@@ -30,6 +31,7 @@ Vassago 是一个面向高精度、高鲁棒性微动手势边缘 AI 识别的�
 ├── configs/
 │   ├── collection/rd/
 │   │   ├── global.toml
+│   │   ├── companions/
 │   │   ├── profiles/
 │   │   └── templates/
 │   ├── firmware/mmwave/
@@ -43,7 +45,8 @@ Vassago 是一个面向高精度、高鲁棒性微动手势边缘 AI 识别的�
 ├── src/vassago/
 │   ├── collection/rd/
 │   ├── configs/
-│   └── firmware/mmwave/
+│   ├── firmware/mmwave/
+│   └── processing/rd/
 ├── tests/
 ├── pyproject.toml
 ├── uv.lock
@@ -53,9 +56,9 @@ Vassago 是一个面向高精度、高鲁棒性微动手势边缘 AI 识别的�
 各目录职责：
 
 - `configs/`
-  仓库正式管理的配置树。包含 mmWave `.cfg`、RD collection TOML，以及配置发现/校验所需的 registry。
+  仓库正式管理的配置树。包含 mmWave `.cfg`、RD collection `global / profiles / companions / templates`，以及配置发现/校验所需的 registry。
 - `data/`
-  运行期采集产物目录。当前主要用于 `collection` session manifest 和 `raw_uart.bin`。
+  运行期采集产物目录。当前主要用于 `collection` session manifest、`raw_uart.bin`、background capture 产物与导出的 `rd.npz`。
 - `docs/`
   项目文档系统。开发规范在 `docs/dev/`，协作者操作文档在 `docs/collaborators/`。
 - `scripts/`
@@ -64,7 +67,8 @@ Vassago 是一个面向高精度、高鲁棒性微动手势边缘 AI 识别的�
   主 Python 包。
   `configs/` 负责配置发现、元数据解析与校验。
   `firmware/mmwave/` 负责串口探测、cfg 上传、包解析与 bring-up CLI。
-  `collection/rd/` 负责 profile、manifest、采集执行与 quick QC。
+  `collection/rd/` 负责 profile、manifest、采集执行与 QC。
+  `processing/rd/` 负责 `raw_uart.bin -> rd.npz` 的离线导出。
 - `tests/`
   当前最小回归测试集，覆盖 configs、mmWave、collection 三条主线。
 - `pyproject.toml` / `uv.lock`
@@ -116,8 +120,10 @@ Vassago 是一个面向高精度、高鲁棒性微动手势边缘 AI 识别的�
 - [docs/dev/tutorials/reusable-code-index.md](docs/dev/tutorials/reusable-code-index.md)
   可复用代码索引。AI 和开发者新增代码前，先看这里，优先复用。
 - [docs/dev/tutorials/configs-directory-guide.md](docs/dev/tutorials/configs-directory-guide.md)
-  `configs/` 目录结构与编辑边界说明。
+  `configs/` 目录结构、文件放置规则与编辑边界说明。
 - [docs/dev/tutorials/configs-command-guide.md](docs/dev/tutorials/configs-command-guide.md)
   `configs` 相关发现、验证和消费命令指南。
+- [docs/dev/tutorials/collection-toml-authoring.md](docs/dev/tutorials/collection-toml-authoring.md)
+  RD collection profile 与 companion 绑定的字段说明。
 - [docs/collaborators/README.md](docs/collaborators/README.md)
   协作者阅读入口。

@@ -3,21 +3,20 @@
 本文档面向需要执行 RD 毫米波数据采集的协作者，覆盖两类采集：
 
 - 手势正样本采集（`collection_type=gesture`）：逐 take 采集，人工 accept/retry
-- 空背景采集（`collection_type=white_space`）：连续录制背景原始数据（无人/无目标活动）
+- 背景采集（`collection_type=white_space` / `normal_activity`）：连续录制背景原始数据
+  `white_space` 适合无人/无目标活动底噪；`normal_activity` 适合保留自然活动背景
 
 `collection` 的目标是把一次采集会话做成可恢复、可验收、可追踪的 session。当前版本会在 session 创建时先落一份 `manifest.json`，其中包含顶层公共字段和完整 `config_snapshot`。
 
 其中：
 
 - `gesture` 会话会被拆成一组 take；只有你明确接受样本后，才会补写正式 take 内容：
-
-- `raw_uart.bin`
-- 当前 take 的 `status`
-- 本次真实 `capture_window`
-- 本次运行时生成的 `target_window`
-- 本次 `marked_window`
-
-而 `white_space` 会话不走逐 take 工作流，而是记录一段连续原始数据（见后文）。
+  - `raw_uart.bin`
+  - 当前 take 的 `status`
+  - 本次真实 `capture_window`
+  - 本次运行时生成的 `target_window`
+  - 本次 `marked_window`
+- `white_space` / `normal_activity` 会话不走逐 take 工作流，而是记录一段连续原始数据（见后文）。
 
 如果你已经完成板卡联调，并且已经创建或准备创建 session，可以按本文档执行采集。
 
@@ -54,12 +53,15 @@ uv run vassago collection rd list-configs
   提供固定倒计时、采集窗口、结束键、串口默认波特率等稳定参数。
 - 单轮采集 profile：[`rd_phase1_default.toml`](../../../configs/collection/rd/profiles/rd_phase1_default.toml)
   提供本轮动作列表、环境列表、默认手别/距离/角度，以及每个 `gesture` 的 `target_window_duration_s`。
+- background companion profile：[`rd_background_default.toml`](../../../configs/collection/rd/companions/rd_background_default.toml)
+  提供 background session 的 `sample_ratio` 和默认录制时长倍率。
 
 对协作者最重要的是：
 
 - 现在没有 `speed` 字段
 - `target_window` 不再在配置里写死起止时间
-- 当前默认 firmware cfg 是 `rd_pointcloud_dual`
+- 当前默认 firmware cfg 是 `rd_candidate`
+- background session 的 companion policy 默认来自 `rd_background_default`
 - 采集时你只需要关注倒计时、`GO` 和结束按键
 
 ## 3. 第一次创建 session
@@ -91,19 +93,23 @@ uv run vassago collection rd init-session
 
 - 交互模式下，`operator_name` 必须手动输入，不会自动带默认值
 - `gesture`、`environment` 不是自由输入，而是从 profile 里选择
-  - 但 `white_space` 这类 background session 不要求选择 `gesture`
-- firmware cfg 也会先给你一个受管 `config_id` 列表；当前 `rd_phase1_default` 默认高亮的是 `rd_pointcloud_dual`
+  - 但 `white_space` / `normal_activity` 这类 background session 不要求选择 `gesture`
+- firmware cfg 也会先给你一个受管 `config_id` 列表；当前 `rd_phase1_default` 默认高亮的是 `rd_candidate`
 - session 创建成功后，会生成一个 `manifest.json`
 - `manifest.json` 顶层会直接写入本次 session 的公共字段，例如 `collection_type`、`firmware_config_id`、`gesture_options`、`environment_options`、串口信息
   - 对 `gesture` session，会额外写入实际选择的 `gesture`
-  - 对 `white_space` / background session，则不会再要求或写入顶层 `gesture`
+  - 对 `white_space` / `normal_activity` background session，则不会再要求或写入顶层 `gesture`
+- `companion_profile_id` 会同时写入 manifest 顶层；background session 还会额外展开 `background_plan`
 - `config_snapshot` 会同时保留本次生效 collection config 的完整镜像，供后续追溯和离线 QC 使用
 
-### 3.1 空背景采集（white_space）怎么创建
+### 3.1 背景采集（white_space / normal_activity）怎么创建
 
-空背景采集的推荐方式也是用交互模式创建 session，然后在 `collection_type` 处选择：
+背景采集的推荐方式也是用交互模式创建 session，然后在 `collection_type` 处选择：
 
 - `white_space`
+  适合无人/无目标活动底噪
+- `normal_activity`
+  适合保留自然背景活动，但不做逐 take 标注
 
 如果你希望创建完就立刻开始连续录制，可以加 `--run`：
 
@@ -111,7 +117,7 @@ uv run vassago collection rd init-session
 uv run vassago collection rd init-session --run
 ```
 
-如果你用非交互模式，至少需要显式指定 `--collection-type white_space`，其余参数与手势采集一致：
+如果你用非交互模式，至少需要显式指定 `--collection-type white_space` 或 `--collection-type normal_activity`，其余参数与手势采集一致：
 
 ```bash
 uv run vassago collection rd init-session \
@@ -129,8 +135,9 @@ uv run vassago collection rd init-session \
 
 说明：
 
-- `white_space` / background session 不再要求选择 `gesture`
+- `white_space` / `normal_activity` background session 不再要求选择 `gesture`
 - `white_space` 要求尽量保持无人/无目标活动，以便形成稳定底噪背景数据
+- `normal_activity` 允许自然背景活动持续存在，但不会拆成逐 take 标注样本
 
 如果你已经知道所有参数，也可以用非交互模式：
 
@@ -187,7 +194,7 @@ uv run vassago collection rd run-session
 - 让你选择一个 session 继续
 - 重新下发该 session 绑定的 `cfg`
 - 若为 `gesture`：从下一个未接受的 take 开始采集
-- 若为 `white_space`：进入连续背景采集流程并落盘
+- 若为 `white_space` / `normal_activity`：进入连续背景采集流程并落盘
 
 如果你已经知道 manifest 路径，也可以直接指定：
 
@@ -215,7 +222,7 @@ uv run vassago collection rd list-sessions
 进入 `run-session` 后，会按 `collection_type` 分两类流程：
 
 - `gesture`：逐 take 采集（本节后续步骤）
-- `white_space`：连续背景采集（见本节末尾“空背景采集怎么运行”）
+- `white_space` / `normal_activity`：连续背景采集（见本节末尾“背景采集怎么运行”）
 
 ### 第一步：选择是否开始当前 take
 
@@ -287,9 +294,9 @@ uv run vassago collection rd list-sessions
 - `Retry take`
 - `Quit session`
 
-### 5.x 空背景采集（white_space）怎么运行
+### 5.x 背景采集（white_space / normal_activity）怎么运行
 
-当 session 的 `collection_type=white_space` 时，`run-session` 会：
+当 session 的 `collection_type=white_space` 或 `normal_activity` 时，`run-session` 会：
 
 - 下发该 session 绑定的 mmWave cfg
 - 进入连续录制
@@ -330,7 +337,7 @@ data/collection/rd/sessions/<session_id>/
       raw_uart.bin
 ```
 
-空背景采集的目录结构通常长这样：
+背景采集的目录结构通常长这样：
 
 ```text
 data/collection/rd/sessions/<session_id>/

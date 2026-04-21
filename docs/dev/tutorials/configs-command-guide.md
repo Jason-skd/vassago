@@ -18,7 +18,7 @@
   - config semantics
   - mmWave cfg integrity
 - business consumers
-  例如 `collection rd init-session`、`collection rd list-configs`、`firmware mmwave smoke-test`。
+  例如 `collection rd init-session`、`collection rd list-configs`、`firmware mmwave smoke-test`、`processing rd extract`。
 
 一句话记忆：
 
@@ -61,6 +61,12 @@ uv run vassago configs list \
   --lifecycle active
 ```
 
+例如只看 background companion profile：
+
+```bash
+uv run vassago configs list --kind collection_rd_companion_profile
+```
+
 这类命令适合回答：
 
 - 某个 `config_id` 是否真的在 catalog 里
@@ -93,7 +99,7 @@ uv run vassago configs validate
 - lifecycle 与目录角色冲突
 - header-only key 被写进 TOML body
 - mmWave cfg 命令名、参数个数、顺序或派生约束错误
-- collection global / profile 无法加载
+- collection global / profile / companion profile 无法加载
 - mmWave cfg integrity registry 与当前 catalog 不一致
 
 什么时候必须跑：
@@ -173,7 +179,7 @@ uv run vassago configs validate-semantics
 
 - TOML body 里是否误写 header-only key
 - mmWave cfg 是否满足命令表与派生约束
-- RD collection global / profile 是否能被 loader 正常消费
+- RD collection global / profile / companion profile 是否能被 loader 正常消费
 
 适合场景：
 
@@ -241,6 +247,12 @@ uv run vassago collection rd list-configs
 - `label` / `description` 是否对人可读
 - profile 是否误写成 template
 
+如果你刚改的是 background companion policy，可以先加一条：
+
+```bash
+uv run vassago configs list --kind collection_rd_companion_profile
+```
+
 ### 验证 collection profile 是否能初始化 session
 
 ```bash
@@ -260,8 +272,24 @@ uv run vassago collection rd init-session \
 适合检查：
 
 - profile 的 `config_id` 能不能被解析
-- `global` 和 `firmware` 绑定是否有效
+- `global`、`firmware` 和 `default_companion_profile_id` 绑定是否有效
 - runtime / defaults / options 是否能被业务流程正常消费
+
+如果你要验 companion profile 对 background session 的影响，可以显式跑一次 background 初始化：
+
+```bash
+uv run vassago collection rd init-session \
+  --config-id rd_phase1_default \
+  --collection-type white_space \
+  --subject-name skd \
+  --environment office_lab \
+  --operator-name your_name \
+  --radar-id rd_aop_01 \
+  --firmware-id rd_phase1_uart \
+  --cli-port /dev/ttyXXX \
+  --data-port /dev/ttyYYY \
+  --no-interactive
+```
 
 ### 验证某个 mmWave cfg 是否能进入真实消费链路
 

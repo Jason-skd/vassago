@@ -8,6 +8,7 @@
 
 - [README.md](../../../README.md)
 - [../README.md](../README.md)
+- [configs-directory-guide.md](configs-directory-guide.md)
 - [development-workflow.md](development-workflow.md)
 
 建议先熟悉下面这些日常高频命令。
@@ -201,7 +202,7 @@ lefthook install
 - `uv run pytest --testmon || [ $? -eq 5 ]`
 - `uv run vassago collection rd offline-qc-all`
 - `uv run vassago configs validate`
-- `scc --ci src scripts docs`
+- `command -v scc >/dev/null 2>&1 && scc --ci src docs || true`
 
 这里的行为可以概括为：
 
@@ -211,7 +212,7 @@ lefthook install
 - 对配置注册表做一次全局一致性校验
 - 对整个项目执行一次 `pyright` 类型检查，确保命令行结果与 VS Code Pylance 基本对齐
 - 对整个项目调用一次 `pytest-testmon`，由 `testmon` 自己选择受改动影响的测试
-- 输出一次仓库代码规模统计，作为提交前的轻量可观测性信息
+- 如果本机装了 `scc`，会额外输出一次仓库代码规模统计，作为提交前的轻量可观测性信息
 - 如果当前仓库还没有测试、`pytest` 返回退出码 `5`，hook 不会因此阻塞提交
 
 这些检查里，`ruff format` 和 `ruff check --fix` 会串行执行，原因是它们都会修改同一批暂存区 Python 文件；其余只读或互不干扰的步骤会并行执行，以减少一次 `pre-commit` 的总耗时。

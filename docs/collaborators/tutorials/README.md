@@ -16,6 +16,6 @@
 - [mmwave_smoke_test.md](mmwave_smoke_test.md)
   mmWave 板卡 `smoke-test` 的简明操作手册。
 - [rd_collection.md](rd_collection.md)
-  RD `collection` 的简明操作手册，覆盖 session 创建、恢复采集、固定倒计时 `GO`、结束键打点与 quick QC。
+  RD `collection` 的简明操作手册，覆盖 gesture / background session 创建、恢复采集、固定倒计时 `GO`、结束键打点与 quick QC。
 - [rd_collection_qc.md](rd_collection_qc.md)
-  RD `collection` 的离线 QC 实操说明，覆盖 `offline-qc` 命令、结果判断与失败后的处理动作。
+  RD `collection` 的离线 QC 实操说明，覆盖 gesture 与 background session 的 `offline-qc`、切片导出和失败后的处理动作。
