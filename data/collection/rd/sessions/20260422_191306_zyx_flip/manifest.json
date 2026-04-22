@@ -1,0 +1,1602 @@
+{
+  "schema_version": "collection_rd_session_v8",
+  "session_id": "20260422_191306_zyx_flip",
+  "created_at": "2026-04-22T19:13:06.812860+08:00",
+  "updated_at": "2026-04-22T19:34:37.178277+08:00",
+  "session_status": "completed",
+  "collection_type": "gesture",
+  "subject_name": "zyx",
+  "hand": "right",
+  "distance_m": 0.5,
+  "angle_deg": 0.0,
+  "environment": "office_lab",
+  "operator_name": "lyj",
+  "note": null,
+  "radar_id": "rd_aop_01",
+  "firmware_id": "rd_phase1_uart",
+  "firmware_config_id": "rd_candidate",
+  "companion_profile_id": "rd_background_default",
+  "background_plan": null,
+  "background_capture": null,
+  "gesture_options": [
+    "wave",
+    "circle_cw",
+    "flip"
+  ],
+  "environment_options": [
+    "office_lab"
+  ],
+  "cli_port": "COM5",
+  "data_port": "COM6",
+  "data_baudrate": 921600,
+  "config_snapshot": {
+    "schema_version": "collection_rd_config_v6",
+    "config_id": "rd_phase1_default",
+    "label": "RD Phase 1 Default",
+    "description": "Default RD collection profile for the current UART-first workflow.",
+    "default_companion_profile_id": "rd_background_default",
+    "batch_size": 80,
+    "global": {
+      "config_id": "rd_global_default"
+    },
+    "runtime": {
+      "capture_window_duration_s": 5.0,
+      "countdown_duration_s": 5.0,
+      "marked_window_end_grace_s": 0.25,
+      "end_mark_key": "space"
+    },
+    "defaults": {
+      "hand": "right",
+      "distance_m": 0.5,
+      "angle_deg": 180.0,
+      "environment": "office_lab",
+      "radar_id": "rd_aop_01",
+      "firmware_id": "rd_phase1_uart",
+      "firmware_config_id": "rd_candidate"
+    },
+    "serial": {
+      "cli_port": null,
+      "data_port": null,
+      "cli_baudrate": 115200,
+      "data_baudrate": 921600
+    },
+    "options": {
+      "gestures": [
+        "wave",
+        "circle_cw",
+        "flip"
+      ],
+      "environments": [
+        "office_lab"
+      ]
+    },
+    "gesture_target_durations": {
+      "wave": 2.0,
+      "circle_cw": 2.0,
+      "flip": 1.2
+    }
+  },
+  "takes": [
+    {
+      "take_index": 1,
+      "take_id": "take01",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take01/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:14:50.489795+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.8308327291771413,
+        "end_s": 4.030832729177141
+      },
+      "marked_window": {
+        "start_s": 2.8308327291771413,
+        "end_s": 3.9179597293259576
+      }
+    },
+    {
+      "take_index": 2,
+      "take_id": "take02",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take02/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:15:11.474730+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.8081297991151104,
+        "end_s": 2.0081297991151104
+      },
+      "marked_window": {
+        "start_s": 0.8081297991151104,
+        "end_s": 1.764005599077791
+      }
+    },
+    {
+      "take_index": 3,
+      "take_id": "take03",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take03/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:15:22.030842+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 1.0882821598844856,
+        "end_s": 2.288282159884486
+      },
+      "marked_window": {
+        "start_s": 1.0882821598844856,
+        "end_s": 1.95402605982963
+      }
+    },
+    {
+      "take_index": 4,
+      "take_id": "take04",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take04/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:15:33.867730+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.1194106672319214,
+        "end_s": 1.3194106672319212
+      },
+      "marked_window": {
+        "start_s": 0.1194106672319214,
+        "end_s": 0.9402436672244221
+      }
+    },
+    {
+      "take_index": 5,
+      "take_id": "take05",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take05/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:16:19.295722+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.454540721745207,
+        "end_s": 3.6545407217452066
+      },
+      "marked_window": {
+        "start_s": 2.454540721745207,
+        "end_s": 3.1995254217181355
+      }
+    },
+    {
+      "take_index": 6,
+      "take_id": "take06",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take06/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:16:30.506014+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 1.3827860367738691,
+        "end_s": 2.582786036773869
+      },
+      "marked_window": {
+        "start_s": 1.3827860367738691,
+        "end_s": 2.0516181368147954
+      }
+    },
+    {
+      "take_index": 7,
+      "take_id": "take07",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take07/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:16:54.785061+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.09326478621567424,
+        "end_s": 1.293264786215674
+      },
+      "marked_window": {
+        "start_s": 0.09326478621567424,
+        "end_s": 0.9428059861529619
+      }
+    },
+    {
+      "take_index": 8,
+      "take_id": "take08",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take08/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:17:06.281724+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.9637547111086344,
+        "end_s": 4.163754711108634
+      },
+      "marked_window": {
+        "start_s": 2.9637547111086344,
+        "end_s": 3.886310611036606
+      }
+    },
+    {
+      "take_index": 9,
+      "take_id": "take09",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take09/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:18:10.185113+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.6728640179628163,
+        "end_s": 3.872864017962816
+      },
+      "marked_window": {
+        "start_s": 2.6728640179628163,
+        "end_s": 3.5771878180094063
+      }
+    },
+    {
+      "take_index": 10,
+      "take_id": "take10",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take10/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:18:20.216201+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 1.5703617332852833,
+        "end_s": 2.7703617332852835
+      },
+      "marked_window": {
+        "start_s": 1.5703617332852833,
+        "end_s": 2.4931877333438024
+      }
+    },
+    {
+      "take_index": 11,
+      "take_id": "take11",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take11/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:18:54.629667+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.08923590793669847,
+        "end_s": 1.2892359079366984
+      },
+      "marked_window": {
+        "start_s": 0.08923590793669847,
+        "end_s": 1.344191407901235
+      }
+    },
+    {
+      "take_index": 12,
+      "take_id": "take12",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take12/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:19:20.066239+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 1.2541194815655743,
+        "end_s": 2.4541194815655745
+      },
+      "marked_window": {
+        "start_s": 1.2541194815655743,
+        "end_s": 1.811303581460379
+      }
+    },
+    {
+      "take_index": 13,
+      "take_id": "take13",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take13/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:19:34.288631+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.011827114180613585,
+        "end_s": 1.2118271141806136
+      },
+      "marked_window": {
+        "start_s": 0.011827114180613585,
+        "end_s": 0.9387743141269311
+      }
+    },
+    {
+      "take_index": 14,
+      "take_id": "take14",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take14/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:19:45.538117+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.27261164402241045,
+        "end_s": 1.4726116440224104
+      },
+      "marked_window": {
+        "start_s": 0.27261164402241045,
+        "end_s": 1.3685595439746976
+      }
+    },
+    {
+      "take_index": 15,
+      "take_id": "take15",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take15/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:20:17.425614+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 3.510186574419661,
+        "end_s": 4.710186574419661
+      },
+      "marked_window": {
+        "start_s": 3.510186574419661,
+        "end_s": 4.116871774429455
+      }
+    },
+    {
+      "take_index": 16,
+      "take_id": "take16",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take16/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:20:26.706632+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 1.8890441743756308,
+        "end_s": 3.0890441743756307
+      },
+      "marked_window": {
+        "start_s": 1.8890441743756308,
+        "end_s": 2.7488006743369624
+      }
+    },
+    {
+      "take_index": 17,
+      "take_id": "take17",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take17/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:20:37.102984+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 1.4761161284170232,
+        "end_s": 2.676116128417023
+      },
+      "marked_window": {
+        "start_s": 1.4761161284170232,
+        "end_s": 2.2588920283596963
+      }
+    },
+    {
+      "take_index": 18,
+      "take_id": "take18",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take18/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:20:57.669298+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.627377577745974,
+        "end_s": 1.827377577745974
+      },
+      "marked_window": {
+        "start_s": 0.627377577745974,
+        "end_s": 1.254770377650857
+      }
+    },
+    {
+      "take_index": 19,
+      "take_id": "take19",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take19/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:21:27.097237+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.105545632720082,
+        "end_s": 3.305545632720082
+      },
+      "marked_window": {
+        "start_s": 2.105545632720082,
+        "end_s": 2.696535632829182
+      }
+    },
+    {
+      "take_index": 20,
+      "take_id": "take20",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take20/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:21:36.272514+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.1691648970173034,
+        "end_s": 3.3691648970173036
+      },
+      "marked_window": {
+        "start_s": 2.1691648970173034,
+        "end_s": 2.9838759971316904
+      }
+    },
+    {
+      "take_index": 21,
+      "take_id": "take21",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take21/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:21:46.264214+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 1.7077166239347366,
+        "end_s": 2.9077166239347365
+      },
+      "marked_window": {
+        "start_s": 1.7077166239347366,
+        "end_s": 2.619056024006568
+      }
+    },
+    {
+      "take_index": 22,
+      "take_id": "take22",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take22/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:21:54.383514+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 3.05382055293837,
+        "end_s": 4.25382055293837
+      },
+      "marked_window": {
+        "start_s": 3.05382055293837,
+        "end_s": 4.036463852855377
+      }
+    },
+    {
+      "take_index": 23,
+      "take_id": "take23",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take23/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:22:03.606411+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.07498235904141,
+        "end_s": 3.2749823590414096
+      },
+      "marked_window": {
+        "start_s": 2.07498235904141,
+        "end_s": 3.153499359032139
+      }
+    },
+    {
+      "take_index": 24,
+      "take_id": "take24",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take24/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:22:12.195422+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 3.062903427971218,
+        "end_s": 4.262903427971218
+      },
+      "marked_window": {
+        "start_s": 3.062903427971218,
+        "end_s": 4.192390728043392
+      }
+    },
+    {
+      "take_index": 25,
+      "take_id": "take25",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take25/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:22:32.923364+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.385409642584867,
+        "end_s": 3.5854096425848674
+      },
+      "marked_window": {
+        "start_s": 2.385409642584867,
+        "end_s": 2.964546942501329
+      }
+    },
+    {
+      "take_index": 26,
+      "take_id": "take26",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take26/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:22:42.606629+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.918168714406257,
+        "end_s": 4.118168714406257
+      },
+      "marked_window": {
+        "start_s": 2.918168714406257,
+        "end_s": 3.566767414449714
+      }
+    },
+    {
+      "take_index": 27,
+      "take_id": "take27",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take27/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:23:06.276259+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 3.0394138254802963,
+        "end_s": 4.239413825480296
+      },
+      "marked_window": {
+        "start_s": 3.0394138254802963,
+        "end_s": 3.696405725553632
+      }
+    },
+    {
+      "take_index": 28,
+      "take_id": "take28",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take28/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:23:16.786855+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.8697707844390447,
+        "end_s": 2.0697707844390445
+      },
+      "marked_window": {
+        "start_s": 0.8697707844390447,
+        "end_s": 1.8502638844074681
+      }
+    },
+    {
+      "take_index": 29,
+      "take_id": "take29",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take29/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:23:26.972643+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.8775801957886645,
+        "end_s": 2.0775801957886646
+      },
+      "marked_window": {
+        "start_s": 0.8775801957886645,
+        "end_s": 2.122542395722121
+      }
+    },
+    {
+      "take_index": 30,
+      "take_id": "take30",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take30/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:23:52.285478+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.5480366651837689,
+        "end_s": 1.7480366651837689
+      },
+      "marked_window": {
+        "start_s": 0.5480366651837689,
+        "end_s": 1.2549108651001006
+      }
+    },
+    {
+      "take_index": 31,
+      "take_id": "take31",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take31/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:24:10.823343+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.32514313733219946,
+        "end_s": 1.5251431373321993
+      },
+      "marked_window": {
+        "start_s": 0.32514313733219946,
+        "end_s": 0.7666579373180866
+      }
+    },
+    {
+      "take_index": 32,
+      "take_id": "take32",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take32/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:24:19.286968+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 3.4688943791260196,
+        "end_s": 4.668894379126019
+      },
+      "marked_window": {
+        "start_s": 3.4688943791260196,
+        "end_s": 4.645094779087231
+      }
+    },
+    {
+      "take_index": 33,
+      "take_id": "take33",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take33/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:24:36.555917+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.301659551396383,
+        "end_s": 3.501659551396383
+      },
+      "marked_window": {
+        "start_s": 2.301659551396383,
+        "end_s": 3.1033753514057025
+      }
+    },
+    {
+      "take_index": 34,
+      "take_id": "take34",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take34/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:24:51.313043+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.9648857311091951,
+        "end_s": 2.164885731109195
+      },
+      "marked_window": {
+        "start_s": 0.9648857311091951,
+        "end_s": 1.874598631169647
+      }
+    },
+    {
+      "take_index": 35,
+      "take_id": "take35",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take35/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:25:30.213992+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.4099267250463863,
+        "end_s": 1.6099267250463862
+      },
+      "marked_window": {
+        "start_s": 0.4099267250463863,
+        "end_s": 1.045323825092055
+      }
+    },
+    {
+      "take_index": 36,
+      "take_id": "take36",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take36/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:25:40.254966+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.1377537684868706,
+        "end_s": 3.3377537684868708
+      },
+      "marked_window": {
+        "start_s": 2.1377537684868706,
+        "end_s": 3.1765500684268773
+      }
+    },
+    {
+      "take_index": 37,
+      "take_id": "take37",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take37/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:25:48.572571+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.7126078798084303,
+        "end_s": 3.91260787980843
+      },
+      "marked_window": {
+        "start_s": 2.7126078798084303,
+        "end_s": 3.4774801797466353
+      }
+    },
+    {
+      "take_index": 38,
+      "take_id": "take38",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take38/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:25:57.484161+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 3.3703527041844694,
+        "end_s": 4.57035270418447
+      },
+      "marked_window": {
+        "start_s": 3.3703527041844694,
+        "end_s": 4.217227604123764
+      }
+    },
+    {
+      "take_index": 39,
+      "take_id": "take39",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take39/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:26:05.228881+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 3.4507081007924043,
+        "end_s": 4.6507081007924045
+      },
+      "marked_window": {
+        "start_s": 3.4507081007924043,
+        "end_s": 3.9624609007732943
+      }
+    },
+    {
+      "take_index": 40,
+      "take_id": "take40",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take40/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:26:14.716874+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.699381104261911,
+        "end_s": 3.899381104261911
+      },
+      "marked_window": {
+        "start_s": 2.699381104261911,
+        "end_s": 3.3077065041288733
+      }
+    },
+    {
+      "take_index": 41,
+      "take_id": "take41",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take41/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:26:22.495604+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 3.1996071969619715,
+        "end_s": 4.399607196961972
+      },
+      "marked_window": {
+        "start_s": 3.1996071969619715,
+        "end_s": 4.3939191970275715
+      }
+    },
+    {
+      "take_index": 42,
+      "take_id": "take42",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take42/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:26:31.390078+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.026625415489203,
+        "end_s": 3.2266254154892033
+      },
+      "marked_window": {
+        "start_s": 2.026625415489203,
+        "end_s": 3.1298359155189246
+      }
+    },
+    {
+      "take_index": 43,
+      "take_id": "take43",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take43/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:26:39.084622+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 3.2358426074055844,
+        "end_s": 4.435842607405585
+      },
+      "marked_window": {
+        "start_s": 3.2358426074055844,
+        "end_s": 4.419323007459752
+      }
+    },
+    {
+      "take_index": 44,
+      "take_id": "take44",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take44/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:27:10.944024+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.4659682729993106,
+        "end_s": 1.6659682729993106
+      },
+      "marked_window": {
+        "start_s": 0.4659682729993106,
+        "end_s": 1.1272620729869232
+      }
+    },
+    {
+      "take_index": 45,
+      "take_id": "take45",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take45/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:27:25.482966+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.1259638090031093,
+        "end_s": 1.3259638090031092
+      },
+      "marked_window": {
+        "start_s": 0.1259638090031093,
+        "end_s": 0.8834500090451911
+      }
+    },
+    {
+      "take_index": 46,
+      "take_id": "take46",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take46/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:27:36.488241+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.5521771134230762,
+        "end_s": 1.7521771134230761
+      },
+      "marked_window": {
+        "start_s": 0.5521771134230762,
+        "end_s": 1.3291115134488791
+      }
+    },
+    {
+      "take_index": 47,
+      "take_id": "take47",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take47/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:27:47.341791+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.8533814652883184,
+        "end_s": 2.0533814652883184
+      },
+      "marked_window": {
+        "start_s": 0.8533814652883184,
+        "end_s": 1.5481569652911276
+      }
+    },
+    {
+      "take_index": 48,
+      "take_id": "take48",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take48/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:27:56.709110+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 1.8856465823285828,
+        "end_s": 3.085646582328583
+      },
+      "marked_window": {
+        "start_s": 1.8856465823285828,
+        "end_s": 2.811142682330683
+      }
+    },
+    {
+      "take_index": 49,
+      "take_id": "take49",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take49/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:28:29.606977+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.7460030434893787,
+        "end_s": 3.9460030434893785
+      },
+      "marked_window": {
+        "start_s": 2.7460030434893787,
+        "end_s": 3.2623076434247196
+      }
+    },
+    {
+      "take_index": 50,
+      "take_id": "take50",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take50/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:28:41.209069+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.7008293492731608,
+        "end_s": 3.9008293492731605
+      },
+      "marked_window": {
+        "start_s": 2.7008293492731608,
+        "end_s": 3.480174249270931
+      }
+    },
+    {
+      "take_index": 51,
+      "take_id": "take51",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take51/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:28:50.315677+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 1.2413128769554755,
+        "end_s": 2.4413128769554753
+      },
+      "marked_window": {
+        "start_s": 1.2413128769554755,
+        "end_s": 1.9450039769290015
+      }
+    },
+    {
+      "take_index": 52,
+      "take_id": "take52",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take52/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:29:12.972118+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.3730130514901743,
+        "end_s": 1.5730130514901743
+      },
+      "marked_window": {
+        "start_s": 0.3730130514901743,
+        "end_s": 1.2104295514291152
+      }
+    },
+    {
+      "take_index": 53,
+      "take_id": "take53",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take53/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:29:21.671595+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.399659117474951,
+        "end_s": 3.5996591174749506
+      },
+      "marked_window": {
+        "start_s": 2.399659117474951,
+        "end_s": 3.2982216174714267
+      }
+    },
+    {
+      "take_index": 54,
+      "take_id": "take54",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take54/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:29:40.973209+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.2321713763923507,
+        "end_s": 3.4321713763923505
+      },
+      "marked_window": {
+        "start_s": 2.2321713763923507,
+        "end_s": 3.214516176376492
+      }
+    },
+    {
+      "take_index": 55,
+      "take_id": "take55",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take55/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:29:52.510760+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 1.944180767932095,
+        "end_s": 3.144180767932095
+      },
+      "marked_window": {
+        "start_s": 1.944180767932095,
+        "end_s": 3.160699267988093
+      }
+    },
+    {
+      "take_index": 56,
+      "take_id": "take56",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take56/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:30:01.931783+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.654962086962053,
+        "end_s": 3.854962086962053
+      },
+      "marked_window": {
+        "start_s": 2.654962086962053,
+        "end_s": 3.213493286864832
+      }
+    },
+    {
+      "take_index": 57,
+      "take_id": "take57",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take57/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:30:12.440795+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.5707441245344677,
+        "end_s": 1.7707441245344677
+      },
+      "marked_window": {
+        "start_s": 0.5707441245344677,
+        "end_s": 1.1621575246099383
+      }
+    },
+    {
+      "take_index": 58,
+      "take_id": "take58",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take58/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:30:23.259523+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.29717997421835896,
+        "end_s": 1.497179974218359
+      },
+      "marked_window": {
+        "start_s": 0.29717997421835896,
+        "end_s": 1.4835932742571458
+      }
+    },
+    {
+      "take_index": 59,
+      "take_id": "take59",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take59/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:30:31.193208+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 3.0786812676984616,
+        "end_s": 4.278681267698461
+      },
+      "marked_window": {
+        "start_s": 3.0786812676984616,
+        "end_s": 4.161665167659521
+      }
+    },
+    {
+      "take_index": 60,
+      "take_id": "take60",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take60/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:30:40.841861+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 1.2251793078561521,
+        "end_s": 2.425179307856152
+      },
+      "marked_window": {
+        "start_s": 1.2251793078561521,
+        "end_s": 2.115284707862884
+      }
+    },
+    {
+      "take_index": 61,
+      "take_id": "take61",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take61/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:30:50.990125+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.13253525955284215,
+        "end_s": 1.3325352595528421
+      },
+      "marked_window": {
+        "start_s": 0.13253525955284215,
+        "end_s": 0.8747644595569
+      }
+    },
+    {
+      "take_index": 62,
+      "take_id": "take62",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take62/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:31:02.212897+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 1.1191093635852845,
+        "end_s": 2.3191093635852846
+      },
+      "marked_window": {
+        "start_s": 1.1191093635852845,
+        "end_s": 1.7222282636212185
+      }
+    },
+    {
+      "take_index": 63,
+      "take_id": "take63",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take63/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:31:09.798133+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 3.451712178385467,
+        "end_s": 4.651712178385467
+      },
+      "marked_window": {
+        "start_s": 3.451712178385467,
+        "end_s": 4.2812560783931985
+      }
+    },
+    {
+      "take_index": 64,
+      "take_id": "take64",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take64/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:31:20.076690+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.4876081097621334,
+        "end_s": 3.6876081097621336
+      },
+      "marked_window": {
+        "start_s": 2.4876081097621334,
+        "end_s": 3.259235109668225
+      }
+    },
+    {
+      "take_index": 65,
+      "take_id": "take65",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take65/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:31:31.069720+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.12977532786084872,
+        "end_s": 1.3297753278608486
+      },
+      "marked_window": {
+        "start_s": 0.12977532786084872,
+        "end_s": 1.1205588278826326
+      }
+    },
+    {
+      "take_index": 66,
+      "take_id": "take66",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take66/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:31:42.298349+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.6454210554636464,
+        "end_s": 1.8454210554636463
+      },
+      "marked_window": {
+        "start_s": 0.6454210554636464,
+        "end_s": 1.165221655392088
+      }
+    },
+    {
+      "take_index": 67,
+      "take_id": "take67",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take67/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:31:52.696869+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 1.299400003064382,
+        "end_s": 2.499400003064382
+      },
+      "marked_window": {
+        "start_s": 1.299400003064382,
+        "end_s": 1.9183850029949099
+      }
+    },
+    {
+      "take_index": 68,
+      "take_id": "take68",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take68/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:32:00.590237+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 3.128739529010921,
+        "end_s": 4.328739529010921
+      },
+      "marked_window": {
+        "start_s": 3.128739529010921,
+        "end_s": 3.8410880289739
+      }
+    },
+    {
+      "take_index": 69,
+      "take_id": "take69",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take69/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:32:08.580188+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 3.241888017118842,
+        "end_s": 4.441888017118842
+      },
+      "marked_window": {
+        "start_s": 3.241888017118842,
+        "end_s": 4.040156017174013
+      }
+    },
+    {
+      "take_index": 70,
+      "take_id": "take70",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take70/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:32:29.790338+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 3.34249886658554,
+        "end_s": 4.54249886658554
+      },
+      "marked_window": {
+        "start_s": 3.34249886658554,
+        "end_s": 4.216242166585289
+      }
+    },
+    {
+      "take_index": 71,
+      "take_id": "take71",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take71/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:32:40.181388+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.762731433555917,
+        "end_s": 1.962731433555917
+      },
+      "marked_window": {
+        "start_s": 0.762731433555917,
+        "end_s": 1.2384544336237013
+      }
+    },
+    {
+      "take_index": 72,
+      "take_id": "take72",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take72/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:32:49.968445+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 1.1394858479755001,
+        "end_s": 2.3394858479755003
+      },
+      "marked_window": {
+        "start_s": 1.1394858479755001,
+        "end_s": 1.9885965479770675
+      }
+    },
+    {
+      "take_index": 73,
+      "take_id": "take73",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take73/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:33:24.436870+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 1.1512399004702139,
+        "end_s": 2.3512399004702136
+      },
+      "marked_window": {
+        "start_s": 1.1512399004702139,
+        "end_s": 1.8168367004254833
+      }
+    },
+    {
+      "take_index": 74,
+      "take_id": "take74",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take74/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:33:33.759641+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.3383910224203484,
+        "end_s": 3.538391022420348
+      },
+      "marked_window": {
+        "start_s": 2.3383910224203484,
+        "end_s": 3.4494469224009663
+      }
+    },
+    {
+      "take_index": 75,
+      "take_id": "take75",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take75/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:33:43.843561+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 1.134130735389076,
+        "end_s": 2.334130735389076
+      },
+      "marked_window": {
+        "start_s": 1.134130735389076,
+        "end_s": 2.209459835314192
+      }
+    },
+    {
+      "take_index": 76,
+      "take_id": "take76",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take76/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:33:54.985005+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.05910479635187003,
+        "end_s": 1.25910479635187
+      },
+      "marked_window": {
+        "start_s": 0.05910479635187003,
+        "end_s": 0.35345299635082483
+      }
+    },
+    {
+      "take_index": 77,
+      "take_id": "take77",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take77/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:34:05.783876+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 0.6226355874040025,
+        "end_s": 1.8226355874040023
+      },
+      "marked_window": {
+        "start_s": 0.6226355874040025,
+        "end_s": 1.3425802873680368
+      }
+    },
+    {
+      "take_index": 78,
+      "take_id": "take78",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take78/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:34:15.989637+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 3.198434940162052,
+        "end_s": 4.398434940162052
+      },
+      "marked_window": {
+        "start_s": 3.198434940162052,
+        "end_s": 3.978147340239957
+      }
+    },
+    {
+      "take_index": 79,
+      "take_id": "take79",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take79/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:34:26.540387+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 2.627539633072704,
+        "end_s": 3.8275396330727043
+      },
+      "marked_window": {
+        "start_s": 2.627539633072704,
+        "end_s": 3.456048933090642
+      }
+    },
+    {
+      "take_index": 80,
+      "take_id": "take80",
+      "status": "accepted",
+      "raw_uart_path": "data/collection/rd/sessions/20260422_191306_zyx_flip/takes/take80/raw_uart.bin",
+      "accepted_at": "2026-04-22T19:34:37.175042+08:00",
+      "capture_window": {
+        "start_s": 0.0,
+        "end_s": 5.0
+      },
+      "target_window": {
+        "start_s": 1.5858765644267407,
+        "end_s": 2.785876564426741
+      },
+      "marked_window": {
+        "start_s": 1.5858765644267407,
+        "end_s": 2.2505703644128516
+      }
+    }
+  ],
+  "gesture": "flip"
+}
