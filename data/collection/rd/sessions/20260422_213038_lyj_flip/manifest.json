@@ -1,0 +1,882 @@
+{
+  "schema_version": "collection_rd_session_v8",
+  "session_id": "20260422_213038_lyj_flip",
+  "created_at": "2026-04-22T21:30:38.385732+08:00",
+  "updated_at": "2026-04-22T21:30:38.385732+08:00",
+  "session_status": "planned",
+  "collection_type": "gesture",
+  "subject_name": "lyj",
+  "hand": "right",
+  "distance_m": 0.5,
+  "angle_deg": 180.0,
+  "environment": "office_lab",
+  "operator_name": "zyx",
+  "note": null,
+  "radar_id": "rd_aop_01",
+  "firmware_id": "rd_phase1_uart",
+  "firmware_config_id": "rd_candidate",
+  "companion_profile_id": "rd_background_default",
+  "background_plan": null,
+  "background_capture": null,
+  "gesture_options": [
+    "wave",
+    "circle_cw",
+    "flip"
+  ],
+  "environment_options": [
+    "office_lab"
+  ],
+  "cli_port": "COM5",
+  "data_port": "COM6",
+  "data_baudrate": 921600,
+  "config_snapshot": {
+    "schema_version": "collection_rd_config_v6",
+    "config_id": "rd_phase1_default",
+    "label": "RD Phase 1 Default",
+    "description": "Default RD collection profile for the current UART-first workflow.",
+    "default_companion_profile_id": "rd_background_default",
+    "batch_size": 80,
+    "global": {
+      "config_id": "rd_global_default"
+    },
+    "runtime": {
+      "capture_window_duration_s": 5.0,
+      "countdown_duration_s": 5.0,
+      "marked_window_end_grace_s": 0.25,
+      "end_mark_key": "space"
+    },
+    "defaults": {
+      "hand": "right",
+      "distance_m": 0.5,
+      "angle_deg": 180.0,
+      "environment": "office_lab",
+      "radar_id": "rd_aop_01",
+      "firmware_id": "rd_phase1_uart",
+      "firmware_config_id": "rd_candidate"
+    },
+    "serial": {
+      "cli_port": null,
+      "data_port": null,
+      "cli_baudrate": 115200,
+      "data_baudrate": 921600
+    },
+    "options": {
+      "gestures": [
+        "wave",
+        "circle_cw",
+        "flip"
+      ],
+      "environments": [
+        "office_lab"
+      ]
+    },
+    "gesture_target_durations": {
+      "wave": 2.0,
+      "circle_cw": 2.0,
+      "flip": 1.2
+    }
+  },
+  "takes": [
+    {
+      "take_index": 1,
+      "take_id": "take01",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 2,
+      "take_id": "take02",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 3,
+      "take_id": "take03",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 4,
+      "take_id": "take04",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 5,
+      "take_id": "take05",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 6,
+      "take_id": "take06",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 7,
+      "take_id": "take07",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 8,
+      "take_id": "take08",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 9,
+      "take_id": "take09",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 10,
+      "take_id": "take10",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 11,
+      "take_id": "take11",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 12,
+      "take_id": "take12",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 13,
+      "take_id": "take13",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 14,
+      "take_id": "take14",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 15,
+      "take_id": "take15",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 16,
+      "take_id": "take16",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 17,
+      "take_id": "take17",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 18,
+      "take_id": "take18",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 19,
+      "take_id": "take19",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 20,
+      "take_id": "take20",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 21,
+      "take_id": "take21",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 22,
+      "take_id": "take22",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 23,
+      "take_id": "take23",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 24,
+      "take_id": "take24",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 25,
+      "take_id": "take25",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 26,
+      "take_id": "take26",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 27,
+      "take_id": "take27",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 28,
+      "take_id": "take28",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 29,
+      "take_id": "take29",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 30,
+      "take_id": "take30",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 31,
+      "take_id": "take31",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 32,
+      "take_id": "take32",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 33,
+      "take_id": "take33",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 34,
+      "take_id": "take34",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 35,
+      "take_id": "take35",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 36,
+      "take_id": "take36",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 37,
+      "take_id": "take37",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 38,
+      "take_id": "take38",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 39,
+      "take_id": "take39",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 40,
+      "take_id": "take40",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 41,
+      "take_id": "take41",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 42,
+      "take_id": "take42",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 43,
+      "take_id": "take43",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 44,
+      "take_id": "take44",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 45,
+      "take_id": "take45",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 46,
+      "take_id": "take46",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 47,
+      "take_id": "take47",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 48,
+      "take_id": "take48",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 49,
+      "take_id": "take49",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 50,
+      "take_id": "take50",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 51,
+      "take_id": "take51",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 52,
+      "take_id": "take52",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 53,
+      "take_id": "take53",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 54,
+      "take_id": "take54",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 55,
+      "take_id": "take55",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 56,
+      "take_id": "take56",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 57,
+      "take_id": "take57",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 58,
+      "take_id": "take58",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 59,
+      "take_id": "take59",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 60,
+      "take_id": "take60",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 61,
+      "take_id": "take61",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 62,
+      "take_id": "take62",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 63,
+      "take_id": "take63",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 64,
+      "take_id": "take64",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 65,
+      "take_id": "take65",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 66,
+      "take_id": "take66",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 67,
+      "take_id": "take67",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 68,
+      "take_id": "take68",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 69,
+      "take_id": "take69",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 70,
+      "take_id": "take70",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 71,
+      "take_id": "take71",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 72,
+      "take_id": "take72",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 73,
+      "take_id": "take73",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 74,
+      "take_id": "take74",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 75,
+      "take_id": "take75",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 76,
+      "take_id": "take76",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 77,
+      "take_id": "take77",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 78,
+      "take_id": "take78",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 79,
+      "take_id": "take79",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    },
+    {
+      "take_index": 80,
+      "take_id": "take80",
+      "status": "planned",
+      "raw_uart_path": null,
+      "accepted_at": null,
+      "capture_window": null,
+      "target_window": null,
+      "marked_window": null
+    }
+  ],
+  "gesture": "flip"
+}
