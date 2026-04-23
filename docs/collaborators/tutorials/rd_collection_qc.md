@@ -12,6 +12,7 @@
 
 ## 1. 先分清两层 QC
 
+
 - `quick QC`
   每次 take 结束后自动执行，决定这次 take 能不能进入 `Accept take`。
 - `offline QC`
@@ -53,7 +54,7 @@ data/collection/rd/sessions/<session_id>/
 先检查当前这一个 session 时，直接运行：
 
 ```bash
-uv run vassago collection rd offline-qc --manifest data/collection/rd/sessions/<session_id>/manifest.json
+uv run vassago collection rd offline-qc --manifest data/collection/rd/sessions/<20260423_085044_qdr_normal_activity>/manifest.json
 ```
 
 这条命令会同时检查：
@@ -66,7 +67,7 @@ uv run vassago collection rd offline-qc --manifest data/collection/rd/sessions/<
 - 对于 `white_space` / `normal_activity` background 会话，先运行一次：
 
 ```bash
-uv run vassago processing rd extract --manifest data/collection/rd/sessions/<session_id>/manifest.json
+uv run vassago processing rd extract --manifest data/collection/rd/sessions/<20260423_085044_qdr_normal_activity>/manifest.json
 ```
 
 - 这一步会生成：
