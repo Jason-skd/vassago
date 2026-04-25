@@ -28,7 +28,7 @@ pre-commit:
         parallel: true
         jobs:
           - name: collection-offline-qc
-            run: uv run vassago collection rd offline-qc-all
+            run: uv run vassago collection rd offline-qc-affected {staged_files}
 
           - name: typecheck
             glob: "*.py"

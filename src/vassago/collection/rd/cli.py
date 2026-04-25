@@ -35,6 +35,7 @@ def register_commands(app: typer.Typer) -> None:
     app.command("run-session")(handle_run_session)
     app.command("resume-session")(handle_run_session)
     app.command("offline-qc")(handle_offline_qc)
+    app.command("offline-qc-affected")(handle_offline_qc_affected)
     app.command("offline-qc-all")(handle_offline_qc_all)
 
 
@@ -362,6 +363,28 @@ def handle_offline_qc_all(
 ) -> None:
     """Run offline QC across every discovered persisted collection manifest."""
     run_result = collection_offline_qc.run_offline_qc_all(sessions_root=sessions_root)
+    _render_offline_qc_run_result(
+        sessions_root=sessions_root,
+        run_result=run_result,
+    )
+    raise typer.Exit(code=1 if run_result.report.has_errors else 0)
+
+
+def handle_offline_qc_affected(
+    changed_paths: Annotated[
+        list[Path] | None,
+        typer.Argument(help="Repository paths used to infer affected manifests."),
+    ] = None,
+    sessions_root: Annotated[
+        Path,
+        typer.Option(help="Directory scanned for collection session manifests."),
+    ] = collection_session.DEFAULT_SESSIONS_ROOT,
+) -> None:
+    """Run offline QC for staged session files or fallback to full scan."""
+    run_result = collection_offline_qc.run_offline_qc_for_changed_paths(
+        changed_paths=changed_paths or [],
+        sessions_root=sessions_root,
+    )
     _render_offline_qc_run_result(
         sessions_root=sessions_root,
         run_result=run_result,

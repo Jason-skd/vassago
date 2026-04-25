@@ -28,7 +28,7 @@
 - `white_space` / `normal_activity` 不走逐 take 的 `Accept take` 流程，因此**没有 live `quick QC` gate**
 - 这两类 background session 的 QC 重点落在 offline 阶段（manifest 契约、连续采集记录；以及后续切片产物的校验）
 
-仓库的 `pre-commit` 会自动执行一次全量 `offline-qc-all`，扫描 `data/collection/rd/sessions/` 下的全部 session manifest。手动先跑一遍当前 session 的 `offline-qc`，意义是更早发现问题；手动跑一遍 `offline-qc-all`，则可以完整复现 hook 的检查口径。
+仓库的 `pre-commit` 会自动执行一次 `offline-qc-affected {staged_files}`：如果这次暂存里只改了某几个 session 文件，它只检查对应的 session manifest；如果暂存里包含会影响 QC 口径的代码或配置改动，它会自动回退到全量 `offline-qc-all`。手动先跑一遍当前 session 的 `offline-qc`，意义是更早发现问题；手动跑一遍 `offline-qc-all`，则可以完整复现全量回归口径。
 
 ## 2. 最短执行路径
 

@@ -400,6 +400,111 @@ def test_run_offline_qc_all_surfaces_manifest_load_errors(tmp_path) -> None:
     assert run_result.manifest_results[0].manifest_path == manifest_path
 
 
+def test_discover_affected_manifest_paths_maps_session_artifacts_to_manifests(
+    tmp_path,
+) -> None:
+    manifest_path_a, _manifest_a = _write_session_manifest(
+        tmp_path, session_id="session_a"
+    )
+    session_b_dir = tmp_path / "session_b"
+    session_b_dir.mkdir(parents=True, exist_ok=False)
+    manifest_path_b, _manifest_b = _write_background_manifest(session_b_dir)
+
+    manifest_paths = offline_qc.discover_affected_manifest_paths(
+        changed_paths=[
+            manifest_path_a,
+            manifest_path_a.parent
+            / "takes"
+            / "take01"
+            / collection_session.RAW_UART_FILENAME,
+            manifest_path_b.parent
+            / "background"
+            / rd_artifact.DEFAULT_BACKGROUND_SEGMENT_INDEX_FILENAME,
+            tmp_path.parent / "notes.txt",
+        ],
+        sessions_root=tmp_path,
+    )
+
+    assert manifest_paths == (manifest_path_a, manifest_path_b)
+
+
+def test_should_run_offline_qc_all_for_changed_paths_flags_qc_runtime_roots() -> None:
+    assert offline_qc.should_run_offline_qc_all_for_changed_paths(
+        changed_paths=["src/vassago/collection/rd/offline_qc.py"]
+    )
+    assert offline_qc.should_run_offline_qc_all_for_changed_paths(
+        changed_paths=["configs/firmware/mmwave/rd_candidate.cfg"]
+    )
+    assert not offline_qc.should_run_offline_qc_all_for_changed_paths(
+        changed_paths=[
+            "docs/dev/tutorials/environment-setup.md",
+            "data/collection/rd/sessions/session_a/manifest.json",
+        ]
+    )
+
+
+def test_run_offline_qc_for_changed_paths_checks_only_affected_manifests(
+    tmp_path,
+) -> None:
+    _write_session_manifest(tmp_path, session_id="session_a")
+    manifest_path, manifest = _write_session_manifest(tmp_path, session_id="session_b")
+    manifest.pop("gesture_options")
+    collection_session.write_manifest(manifest_path=manifest_path, manifest=manifest)
+
+    run_result = offline_qc.run_offline_qc_for_changed_paths(
+        changed_paths=[
+            manifest_path.parent
+            / "takes"
+            / "take01"
+            / collection_session.RAW_UART_FILENAME
+        ],
+        sessions_root=tmp_path,
+    )
+
+    assert run_result.checked_manifest_count == 1
+    assert tuple(result.manifest_path for result in run_result.manifest_results) == (
+        manifest_path,
+    )
+    assert run_result.report.has_errors is True
+
+
+def test_run_offline_qc_for_changed_paths_returns_empty_when_no_session_files_match(
+    tmp_path,
+) -> None:
+    _write_session_manifest(tmp_path, session_id="session_a")
+
+    run_result = offline_qc.run_offline_qc_for_changed_paths(
+        changed_paths=[tmp_path.parent / "notes.txt"],
+        sessions_root=tmp_path,
+    )
+
+    assert run_result.checked_manifest_count == 0
+    assert run_result.manifest_results == ()
+    assert run_result.report.findings == ()
+    assert run_result.report.has_errors is False
+
+
+def test_run_offline_qc_for_changed_paths_falls_back_to_full_run_for_qc_code_changes(
+    tmp_path,
+) -> None:
+    _write_session_manifest(tmp_path, session_id="session_a")
+    manifest_path, manifest = _write_session_manifest(tmp_path, session_id="session_b")
+    manifest.pop("gesture_options")
+    collection_session.write_manifest(manifest_path=manifest_path, manifest=manifest)
+
+    run_result = offline_qc.run_offline_qc_for_changed_paths(
+        changed_paths=["src/vassago/collection/rd/offline_qc.py"],
+        sessions_root=tmp_path,
+    )
+
+    assert run_result.checked_manifest_count == 2
+    assert tuple(result.manifest_path for result in run_result.manifest_results) == (
+        tmp_path / "session_a" / "manifest.json",
+        tmp_path / "session_b" / "manifest.json",
+    )
+    assert run_result.report.has_errors is True
+
+
 def test_collection_offline_qc_command_returns_nonzero_on_errors(tmp_path) -> None:
     manifest_path, manifest = _write_manifest(tmp_path)
     manifest.pop("gesture_options")
@@ -419,6 +524,36 @@ def test_collection_offline_qc_command_returns_nonzero_on_errors(tmp_path) -> No
     assert result.exit_code == 1
     assert "Offline QC Summary" in result.output
     assert "errors: 1" in result.output
+
+
+def test_collection_offline_qc_affected_command_returns_nonzero_on_errors(
+    tmp_path,
+) -> None:
+    _write_session_manifest(tmp_path, session_id="session_a")
+    manifest_path, manifest = _write_session_manifest(tmp_path, session_id="session_b")
+    manifest.pop("gesture_options")
+    collection_session.write_manifest(manifest_path=manifest_path, manifest=manifest)
+
+    result = runner.invoke(
+        app,
+        [
+            "collection",
+            "rd",
+            "offline-qc-affected",
+            "--sessions-root",
+            str(tmp_path),
+            str(
+                manifest_path.parent
+                / "takes"
+                / "take01"
+                / collection_session.RAW_UART_FILENAME
+            ),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Offline QC Validation Summary" in result.output
+    assert "checked_manifests: 1" in result.output
 
 
 def test_collection_offline_qc_all_command_returns_nonzero_on_errors(tmp_path) -> None:

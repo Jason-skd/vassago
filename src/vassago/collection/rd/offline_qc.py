@@ -36,6 +36,14 @@ CODE_RAW_UART_NOT_FOUND = "raw_uart_artifact_not_found"
 CODE_BACKGROUND_CAPTURE_NOT_COMPLETED = "background_capture_not_completed"
 CODE_BACKGROUND_CAPTURE_SIZE_MISMATCH = "background_capture_size_mismatch"
 CODE_EMPTY_BACKGROUND_CAPTURE = "empty_background_capture"
+FULL_RESCAN_TRIGGER_ROOTS: tuple[str, ...] = (
+    "configs",
+    "src/vassago/collection/rd",
+    "src/vassago/processing/rd",
+    "src/vassago/processing/mmwave",
+    "src/vassago/firmware/mmwave",
+    "src/vassago/configs",
+)
 
 
 @dataclass(slots=True, frozen=True)
@@ -82,34 +90,92 @@ def run_offline_qc_all(
     checks: Sequence[OfflineQcCheck] | None = None,
 ) -> OfflineQcRunResult:
     """Run offline QC for every discovered session manifest under one root."""
-    manifest_results: list[OfflineQcManifestResult] = []
-    for manifest_path in _discover_manifest_paths(sessions_root=sessions_root):
-        try:
-            manifest = collection_session.load_manifest(manifest_path)
-        except Exception as exc:  # noqa: BLE001
-            report = QcReport.from_findings(
-                [_offline_error(CODE_MANIFEST_LOAD_ERROR, str(exc))]
-            )
-        else:
-            report = run_offline_qc_context(
-                context=OfflineQcSessionContext(
-                    manifest_path=manifest_path,
-                    manifest=manifest,
-                ),
-                checks=checks,
-            )
-        manifest_results.append(
-            OfflineQcManifestResult(
-                manifest_path=manifest_path,
-                report=report,
-            )
+    return run_offline_qc_for_manifests(
+        manifest_paths=_discover_manifest_paths(sessions_root=sessions_root),
+        checks=checks,
+    )
+
+
+def run_offline_qc_for_manifests(
+    *,
+    manifest_paths: Sequence[str | Path],
+    checks: Sequence[OfflineQcCheck] | None = None,
+) -> OfflineQcRunResult:
+    """Run offline QC for one explicit set of manifest paths."""
+    normalized_manifest_paths = _normalize_manifest_paths(manifest_paths)
+    manifest_results = tuple(
+        _run_offline_qc_manifest(manifest_path=manifest_path, checks=checks)
+        for manifest_path in normalized_manifest_paths
+    )
+    return OfflineQcRunResult(
+        manifest_results=manifest_results,
+        report=merge_reports(tuple(result.report for result in manifest_results)),
+    )
+
+
+def run_offline_qc_for_changed_paths(
+    *,
+    changed_paths: Sequence[str | Path],
+    sessions_root: str | Path = collection_session.DEFAULT_SESSIONS_ROOT,
+    checks: Sequence[OfflineQcCheck] | None = None,
+) -> OfflineQcRunResult:
+    """Run targeted offline QC for changed session files or fallback to full scan."""
+    if should_run_offline_qc_all_for_changed_paths(changed_paths=changed_paths):
+        return run_offline_qc_all(sessions_root=sessions_root, checks=checks)
+
+    return run_offline_qc_for_manifests(
+        manifest_paths=discover_affected_manifest_paths(
+            changed_paths=changed_paths,
+            sessions_root=sessions_root,
+        ),
+        checks=checks,
+    )
+
+
+def discover_affected_manifest_paths(
+    *,
+    changed_paths: Sequence[str | Path],
+    sessions_root: str | Path = collection_session.DEFAULT_SESSIONS_ROOT,
+) -> tuple[Path, ...]:
+    """Map changed session artifacts back to their owning manifest paths."""
+    resolved_sessions_root = resolve_repo_path(sessions_root)
+    manifest_paths: set[Path] = set()
+    for changed_path in changed_paths:
+        resolved_changed_path = resolve_repo_path(changed_path)
+        if not _path_is_same_or_within(
+            path=resolved_changed_path,
+            root=resolved_sessions_root,
+        ):
+            continue
+
+        relative_path = resolved_changed_path.relative_to(resolved_sessions_root)
+        if not relative_path.parts:
+            continue
+        manifest_paths.add(
+            resolved_sessions_root
+            / relative_path.parts[0]
+            / collection_session.MANIFEST_FILENAME
         )
 
-    reports = tuple(result.report for result in manifest_results)
-    return OfflineQcRunResult(
-        manifest_results=tuple(manifest_results),
-        report=merge_reports(reports),
+    return tuple(sorted(manifest_paths))
+
+
+def should_run_offline_qc_all_for_changed_paths(
+    *,
+    changed_paths: Sequence[str | Path],
+) -> bool:
+    """Return whether changed paths require preserving full-repository QC."""
+    trigger_roots = tuple(
+        resolve_repo_path(trigger_root) for trigger_root in FULL_RESCAN_TRIGGER_ROOTS
     )
+    for changed_path in changed_paths:
+        resolved_changed_path = resolve_repo_path(changed_path)
+        if any(
+            _path_is_same_or_within(path=resolved_changed_path, root=trigger_root)
+            for trigger_root in trigger_roots
+        ):
+            return True
+    return False
 
 
 def run_offline_qc_context(
@@ -380,6 +446,42 @@ def _discover_manifest_paths(*, sessions_root: str | Path) -> tuple[Path, ...]:
     return tuple(
         sorted(resolved_sessions_root.glob(f"*/{collection_session.MANIFEST_FILENAME}"))
     )
+
+
+def _normalize_manifest_paths(manifest_paths: Sequence[str | Path]) -> tuple[Path, ...]:
+    return tuple(
+        sorted({resolve_repo_path(manifest_path) for manifest_path in manifest_paths})
+    )
+
+
+def _run_offline_qc_manifest(
+    *,
+    manifest_path: str | Path,
+    checks: Sequence[OfflineQcCheck] | None,
+) -> OfflineQcManifestResult:
+    resolved_manifest_path = resolve_repo_path(manifest_path)
+    try:
+        manifest = collection_session.load_manifest(resolved_manifest_path)
+    except Exception as exc:  # noqa: BLE001
+        report = QcReport.from_findings(
+            [_offline_error(CODE_MANIFEST_LOAD_ERROR, str(exc))]
+        )
+    else:
+        report = run_offline_qc_context(
+            context=OfflineQcSessionContext(
+                manifest_path=resolved_manifest_path,
+                manifest=manifest,
+            ),
+            checks=checks,
+        )
+    return OfflineQcManifestResult(
+        manifest_path=resolved_manifest_path,
+        report=report,
+    )
+
+
+def _path_is_same_or_within(*, path: Path, root: Path) -> bool:
+    return path == root or root in path.parents
 
 
 def _with_take_id(finding: QcFinding, *, take_id: str | None) -> QcFinding:
