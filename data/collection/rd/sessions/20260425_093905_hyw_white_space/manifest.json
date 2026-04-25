@@ -1,0 +1,97 @@
+{
+  "schema_version": "collection_rd_session_v8",
+  "session_id": "20260425_093905_hyw_white_space",
+  "created_at": "2026-04-25T09:39:05.071370+08:00",
+  "updated_at": "2026-04-25T09:55:51.265787+08:00",
+  "session_status": "completed",
+  "collection_type": "white_space",
+  "subject_name": "hyw",
+  "hand": "right",
+  "distance_m": 0.5,
+  "angle_deg": 180.0,
+  "environment": "office_lab",
+  "operator_name": "hyw",
+  "note": null,
+  "radar_id": "rd_aop_02",
+  "firmware_id": "rd_phase1_uart",
+  "firmware_config_id": "rd_candidate",
+  "companion_profile_id": "rd_background_default",
+  "background_plan": {
+    "sample_ratio": 2.0,
+    "default_recording_duration_multiplier": 1.25,
+    "window_duration_s": 5.0,
+    "target_segment_count": 160,
+    "planned_recording_duration_s": 1000.0,
+    "selection_policy": "random_after_capture",
+    "save_policy": "keep_full_capture",
+    "selection_seed": 1504239842
+  },
+  "background_capture": {
+    "status": "completed",
+    "raw_uart_path": "data/collection/rd/sessions/20260425_093905_hyw_white_space/background/background_raw_uart.bin",
+    "started_at": "2026-04-25T09:39:11.050807+08:00",
+    "completed_at": "2026-04-25T09:55:51.265711+08:00",
+    "interrupted_at": null,
+    "recording_duration_s": 1000.2115967000063,
+    "recorded_bytes": 39872729
+  },
+  "gesture_options": [
+    "wave",
+    "circle_cw",
+    "flip"
+  ],
+  "environment_options": [
+    "office_lab"
+  ],
+  "cli_port": "COM9",
+  "data_port": "COM10",
+  "data_baudrate": 921600,
+  "config_snapshot": {
+    "schema_version": "collection_rd_config_v6",
+    "config_id": "rd_phase1_default",
+    "label": "RD Phase 1 Default",
+    "description": "Default RD collection profile for the current UART-first workflow.",
+    "default_companion_profile_id": "rd_background_default",
+    "batch_size": 80,
+    "global": {
+      "config_id": "rd_global_default"
+    },
+    "runtime": {
+      "capture_window_duration_s": 5.0,
+      "countdown_duration_s": 5.0,
+      "marked_window_end_grace_s": 0.25,
+      "end_mark_key": "space"
+    },
+    "defaults": {
+      "hand": "right",
+      "distance_m": 0.5,
+      "angle_deg": 180.0,
+      "environment": "office_lab",
+      "radar_id": "rd_aop_01",
+      "firmware_id": "rd_phase1_uart",
+      "firmware_config_id": "rd_candidate"
+    },
+    "serial": {
+      "cli_port": null,
+      "data_port": null,
+      "cli_baudrate": 115200,
+      "data_baudrate": 921600
+    },
+    "options": {
+      "gestures": [
+        "wave",
+        "circle_cw",
+        "flip"
+      ],
+      "environments": [
+        "office_lab"
+      ]
+    },
+    "gesture_target_durations": {
+      "wave": 2.0,
+      "circle_cw": 2.0,
+      "flip": 1.2
+    }
+  },
+  "takes": []
+}
