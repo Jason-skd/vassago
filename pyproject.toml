@@ -69,6 +69,13 @@ force-single-line = true
     "TC003",
 ]
 
+# scripts: 独立执行的一次性脚本，不按包源码要求 __init__ / docstring / raise 抽象
+"scripts/**/*.py" = [
+    "INP001",
+    "D",
+    "TRY301",
+]
+
 # 测试文件: 允许 assert, 魔法数字, 省略类型注解, 允许访问私有成员
 "tests/**/*.py" = [
     "S101",    # assert
