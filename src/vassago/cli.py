@@ -8,6 +8,7 @@ from vassago.collection.rd import cli as collection_rd_cli
 from vassago.configs import cli as configs_cli
 from vassago.firmware.mmwave import cli as mmwave_cli
 from vassago.processing import cli as processing_cli
+from vassago.training import cli as training_cli
 
 app = typer.Typer(
     add_completion=False,
@@ -43,6 +44,13 @@ processing_app = typer.Typer(
 )
 app.add_typer(processing_app, name="processing")
 processing_cli.register_commands(processing_app)
+
+training_app = typer.Typer(
+    help="Model training workflows.",
+    no_args_is_help=True,
+)
+app.add_typer(training_app, name="training")
+training_cli.register_commands(training_app)
 
 mmwave_app = typer.Typer(
     help="TI-style mmWave UART tooling.",

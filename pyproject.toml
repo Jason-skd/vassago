@@ -32,6 +32,9 @@ dev = [
     "pytest-testmon>=2.2.0",
     "ruff>=0.15.10",
 ]
+train = [
+    "torch>=2.8.0",
+]
 
 [tool.ruff.format]
 docstring-code-format = true
@@ -67,6 +70,9 @@ force-single-line = true
 "src/vassago/processing/rd/cli.py" = [
     "FBT002",
     "TC003",
+]
+"src/vassago/training/rd/cli.py" = [
+    "FBT002",
 ]
 
 # scripts: 独立执行的一次性脚本，不按包源码要求 __init__ / docstring / raise 抽象

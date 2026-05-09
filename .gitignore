@@ -383,3 +383,6 @@ temp/
 
 # testmon
 .testmon*
+
+# training artifacts
+artifacts/
