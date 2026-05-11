@@ -65,6 +65,7 @@ def train_classifier(config: TrainingRunConfig) -> TrainingRunResult:
         samples=scan_result.samples,
         val_ratio=config.val_ratio,
         seed=config.seed,
+        group_by=config.split_group_by,
     )
     label_to_index = {label: index for index, label in enumerate(scan_result.labels)}
     console.print("Preparing training run")
@@ -87,6 +88,8 @@ def train_classifier(config: TrainingRunConfig) -> TrainingRunResult:
         label_to_index=label_to_index,
         target_frames=config.target_frames,
         normalize=config.normalize,
+        use_active_window=config.use_active_window,
+        active_window_context_frames=config.active_window_context_frames,
         torch=torch,
     )
     val_dataset = _RdTorchDataset(
@@ -94,12 +97,21 @@ def train_classifier(config: TrainingRunConfig) -> TrainingRunResult:
         label_to_index=label_to_index,
         target_frames=config.target_frames,
         normalize=config.normalize,
+        use_active_window=config.use_active_window,
+        active_window_context_frames=config.active_window_context_frames,
+        torch=torch,
+    )
+    sampler = _build_train_sampler(
+        config=config,
+        train_samples=split.train_samples,
+        label_to_index=label_to_index,
         torch=torch,
     )
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=config.batch_size,
-        shuffle=True,
+        shuffle=sampler is None,
+        sampler=sampler,
     )
     val_loader = torch.utils.data.DataLoader(
         val_dataset,
@@ -117,7 +129,12 @@ def train_classifier(config: TrainingRunConfig) -> TrainingRunResult:
         T_max=config.epochs,
         eta_min=config.min_learning_rate,
     )
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = _build_loss(
+        config=config,
+        train_samples=split.train_samples,
+        label_to_index=label_to_index,
+        torch=torch,
+    )
 
     run_dir = _create_run_dir(
         output_root=config.output_root,
@@ -256,12 +273,16 @@ class _RdTorchDataset(_TorchDataset):
         label_to_index: dict[str, int],
         target_frames: int,
         normalize: bool,
+        use_active_window: bool,
+        active_window_context_frames: int,
         torch,
     ) -> None:
         self._samples = samples
         self._label_to_index = label_to_index
         self._target_frames = target_frames
         self._normalize = normalize
+        self._use_active_window = use_active_window
+        self._active_window_context_frames = active_window_context_frames
         self._torch = torch
 
     def __len__(self) -> int:
@@ -273,6 +294,8 @@ class _RdTorchDataset(_TorchDataset):
             npz_path=sample.path,
             target_frames=self._target_frames,
             normalize=self._normalize,
+            use_active_window=self._use_active_window,
+            active_window_context_frames=self._active_window_context_frames,
         )
         label_index = self._label_to_index[sample.label]
         features = self._torch.from_numpy(rd_tensor.astype(np.float32, copy=False))
@@ -358,6 +381,99 @@ def _create_run_dir(*, output_root: Path, task_name: str, model_name: str) -> Pa
     return run_dir
 
 
+def _build_train_sampler(
+    *,
+    config: TrainingRunConfig,
+    train_samples: tuple[TrainingSample, ...],
+    label_to_index: dict[str, int],
+    torch,
+):
+    """Build an optional weighted sampler for imbalanced training sets."""
+    if config.sampler_mode != "weighted":
+        return None
+
+    class_counts = np.zeros(len(label_to_index), dtype=np.float32)
+    for sample in train_samples:
+        class_counts[label_to_index[sample.label]] += 1.0
+    if np.any(class_counts <= 0):
+        return None
+
+    class_weights = np.sum(class_counts) / (len(class_counts) * class_counts)
+    sample_weights = np.asarray(
+        [class_weights[label_to_index[sample.label]] for sample in train_samples],
+        dtype=np.float32,
+    )
+    return torch.utils.data.WeightedRandomSampler(
+        weights=torch.as_tensor(sample_weights, dtype=torch.float32),
+        num_samples=len(train_samples),
+        replacement=True,
+    )
+
+
+def _build_loss(
+    *,
+    config: TrainingRunConfig,
+    train_samples: tuple[TrainingSample, ...],
+    label_to_index: dict[str, int],
+    torch,
+):
+    """Build one loss function, optionally with class re-weighting."""
+    class_weights = None
+    if config.class_weighted_loss:
+        class_weights = _compute_class_weights(
+            train_samples=train_samples,
+            label_to_index=label_to_index,
+            torch=torch,
+        )
+
+    if config.loss_mode == "cross_entropy":
+        return torch.nn.CrossEntropyLoss(weight=class_weights)
+    if config.loss_mode == "focal":
+        return _FocalCrossEntropyLoss(
+            gamma=config.focal_gamma,
+            class_weights=class_weights,
+            torch=torch,
+        )
+
+    msg = f"Unsupported loss_mode: {config.loss_mode!r}"
+    raise ValueError(msg)
+
+
+def _compute_class_weights(
+    *,
+    train_samples: tuple[TrainingSample, ...],
+    label_to_index: dict[str, int],
+    torch,
+):
+    """Compute inverse-frequency class weights for cross-entropy style losses."""
+    class_counts = np.zeros(len(label_to_index), dtype=np.float32)
+    for sample in train_samples:
+        class_counts[label_to_index[sample.label]] += 1.0
+    class_counts = np.maximum(class_counts, 1.0)
+    class_weights = np.sum(class_counts) / (len(class_counts) * class_counts)
+    return torch.as_tensor(class_weights, dtype=torch.float32)
+
+
+class _FocalCrossEntropyLoss:
+    """A lightweight focal-loss wrapper over per-sample cross entropy."""
+
+    def __init__(self, *, gamma: float, class_weights, torch) -> None:
+        self._gamma = gamma
+        self._class_weights = class_weights
+        self._torch = torch
+
+    def __call__(self, logits, targets):
+        ce = self._torch.nn.functional.cross_entropy(
+            logits,
+            targets,
+            reduction="none",
+            weight=self._class_weights,
+        )
+        pt = self._torch.exp(-ce)
+        focal_weight = (1.0 - pt) ** self._gamma
+        return self._torch.mean(focal_weight * ce)
+
+
 def _seed_everything(*, seed: int, torch) -> None:
     """Seed Python, NumPy, and torch RNGs for reproducibility."""
     random.seed(seed)
@@ -389,11 +505,18 @@ def _serialize_run_config(*, config: TrainingRunConfig) -> dict[str, object]:
         "label_mode": config.label_mode,
         "target_frames": config.target_frames,
         "batch_size": config.batch_size,
+        "split_group_by": config.split_group_by,
         "epochs": config.epochs,
         "learning_rate": config.learning_rate,
         "min_learning_rate": config.min_learning_rate,
         "weight_decay": config.weight_decay,
         "val_ratio": config.val_ratio,
+        "use_active_window": config.use_active_window,
+        "active_window_context_frames": config.active_window_context_frames,
+        "sampler_mode": config.sampler_mode,
+        "class_weighted_loss": config.class_weighted_loss,
+        "loss_mode": config.loss_mode,
+        "focal_gamma": config.focal_gamma,
         "early_stopping_patience": config.early_stopping_patience,
         "early_stopping_min_delta": config.early_stopping_min_delta,
         "seed": config.seed,

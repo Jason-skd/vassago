@@ -9,6 +9,9 @@ from typing import Literal
 ModelName = Literal["2d_cnn_tcn", "3d_cnn"]
 TaskName = Literal["detector", "classifier"]
 LabelMode = Literal["gesture", "collection", "auto", "detection"]
+SplitGroupBy = Literal["subject", "session"]
+SamplerMode = Literal["uniform", "weighted"]
+LossMode = Literal["cross_entropy", "focal"]
 
 
 @dataclass(slots=True, frozen=True)
@@ -32,4 +35,11 @@ class TrainingRunConfig:
     early_stopping_min_delta: float
     seed: int
     normalize: bool
+    split_group_by: SplitGroupBy = "subject"
+    use_active_window: bool = True
+    active_window_context_frames: int = 4
+    sampler_mode: SamplerMode = "uniform"
+    class_weighted_loss: bool = False
+    loss_mode: LossMode = "cross_entropy"
+    focal_gamma: float = 2.0
     device: str | None = None

@@ -85,7 +85,9 @@ class Rd2dCnnTcnClassifier(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Classify one batch of RD clips shaped `(B, T, R, D)`."""
         batch_size, frame_count, range_bin_count, doppler_bin_count = x.shape
-        frames = x.reshape(batch_size * frame_count, 1, range_bin_count, doppler_bin_count)
+        frames = x.reshape(
+            batch_size * frame_count, 1, range_bin_count, doppler_bin_count
+        )
         encoded_frames = self.encoder(frames)
         encoded_frames = encoded_frames.reshape(batch_size, frame_count, -1)
         temporal_features = encoded_frames.transpose(1, 2)
@@ -95,11 +97,12 @@ class Rd2dCnnTcnClassifier(nn.Module):
 
 
 class Rd3dCnnClassifier(nn.Module):
-    """A compact 3D CNN that learns spatiotemporal RD patterns jointly."""
+    """A 3D spatial stem followed by a temporal head for RD clips."""
 
     def __init__(self, *, num_classes: int) -> None:
         super().__init__()
-        self.features = nn.Sequential(
+        # Keep temporal resolution in early layers; pool only over (R, D).
+        self.spatial_stem = nn.Sequential(
             nn.Conv3d(1, 16, kernel_size=3, padding=1),
             nn.BatchNorm3d(16),
             nn.ReLU(),
@@ -107,20 +110,30 @@ class Rd3dCnnClassifier(nn.Module):
             nn.Conv3d(16, 32, kernel_size=3, padding=1),
             nn.BatchNorm3d(32),
             nn.ReLU(),
-            nn.MaxPool3d(kernel_size=(2, 2, 2)),
+            nn.MaxPool3d(kernel_size=(1, 2, 2)),
             nn.Conv3d(32, 64, kernel_size=3, padding=1),
             nn.BatchNorm3d(64),
             nn.ReLU(),
-            nn.AdaptiveAvgPool3d(output_size=(1, 1, 1)),
-            nn.Flatten(),
+            nn.MaxPool3d(kernel_size=(1, 2, 2)),
+            nn.Conv3d(64, 128, kernel_size=3, padding=1),
+            nn.BatchNorm3d(128),
+            nn.ReLU(),
         )
-        self.classifier = nn.Linear(64, num_classes)
+        self.temporal_head = nn.Sequential(
+            TemporalBlock(channels=128, dilation=1),
+            TemporalBlock(channels=128, dilation=2),
+            TemporalBlock(channels=128, dilation=4),
+        )
+        self.classifier = nn.Linear(128, num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Classify one batch of RD clips shaped `(B, T, R, D)`."""
         x = x.unsqueeze(1)
-        features = self.features(x)
-        return self.classifier(features)
+        features = self.spatial_stem(x)
+        features = features.mean(dim=(3, 4))
+        features = self.temporal_head(features)
+        pooled = features.mean(dim=2)
+        return self.classifier(pooled)
 
 
 def build_model(*, model_name: ModelName, num_classes: int) -> nn.Module:
@@ -132,4 +145,3 @@ def build_model(*, model_name: ModelName, num_classes: int) -> nn.Module:
 
     msg = f"Unsupported model_name: {model_name!r}"
     raise ValueError(msg)
-

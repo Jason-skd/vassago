@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from vassago.training.rd.config import LabelMode
+from vassago.training.rd.config import SplitGroupBy
 
 DETECTION_POSITIVE_LABEL = "gesture"
 DETECTION_NEGATIVE_LABEL = "non_gesture"
@@ -22,6 +23,7 @@ class TrainingSample:
     path: Path
     label: str
     subject_name: str
+    session_id: str
 
 
 @dataclass(slots=True, frozen=True)
@@ -79,31 +81,88 @@ def split_dataset(
     samples: tuple[TrainingSample, ...],
     val_ratio: float,
     seed: int,
+    group_by: SplitGroupBy,
 ) -> DatasetSplit:
-    """Build a stratified train/validation split from discovered samples."""
+    """Build a group-aware stratified train/validation split from discovered samples."""
     if not 0.0 < val_ratio < 1.0:
         msg = "val_ratio must be between 0 and 1."
         raise ValueError(msg)
 
-    by_label: dict[str, list[TrainingSample]] = {}
-    for sample in samples:
-        by_label.setdefault(sample.label, []).append(sample)
-
     rng = random.Random(seed)
+    group_to_samples: dict[str, list[TrainingSample]] = {}
+    for sample in samples:
+        group_key = _resolve_group_key(sample=sample, group_by=group_by)
+        group_to_samples.setdefault(group_key, []).append(sample)
+
+    group_keys = list(group_to_samples.keys())
+    rng.shuffle(group_keys)
+
+    label_totals: dict[str, int] = {}
+    for sample in samples:
+        label_totals[sample.label] = label_totals.get(sample.label, 0) + 1
+    label_targets = {
+        label: max(1, round(total_count * val_ratio))
+        for label, total_count in label_totals.items()
+        if total_count > 1
+    }
+    label_val_counts = {label: 0 for label in label_totals}
+
+    val_group_keys: set[str] = set()
+    for label, target_count in label_targets.items():
+        candidate_group_keys = [
+            group_key
+            for group_key in group_keys
+            if any(sample.label == label for sample in group_to_samples[group_key])
+        ]
+        rng.shuffle(candidate_group_keys)
+        for group_key in candidate_group_keys:
+            if label_val_counts[label] >= target_count:
+                break
+            val_group_keys.add(group_key)
+            for sample in group_to_samples[group_key]:
+                label_val_counts[sample.label] += 1
+
+    val_group_keys = _rebalance_group_split_for_label_coverage(
+        samples=samples,
+        group_to_samples=group_to_samples,
+        val_group_keys=val_group_keys,
+        rng=rng,
+    )
+
     train_samples: list[TrainingSample] = []
     val_samples: list[TrainingSample] = []
-    for label_samples in by_label.values():
-        shuffled = list(label_samples)
-        rng.shuffle(shuffled)
-        if len(shuffled) == 1:
-            train_samples.extend(shuffled)
-            continue
+    for group_key, grouped_samples in group_to_samples.items():
+        if group_key in val_group_keys:
+            val_samples.extend(grouped_samples)
+        else:
+            train_samples.extend(grouped_samples)
 
-        val_count = max(1, round(len(shuffled) * val_ratio))
-        if val_count >= len(shuffled):
-            val_count = len(shuffled) - 1
-        val_samples.extend(shuffled[:val_count])
-        train_samples.extend(shuffled[val_count:])
+    if not train_samples:
+        moved_group = next(iter(val_group_keys), None)
+        if moved_group is None:
+            msg = "Unable to build a non-empty train split from grouped samples."
+            raise ValueError(msg)
+        moved_samples = group_to_samples[moved_group]
+        train_samples.extend(moved_samples)
+        val_samples = [sample for sample in val_samples if sample not in moved_samples]
+    if not val_samples:
+        movable_group = next(
+            (
+                group_key
+                for group_key in group_keys
+                if group_key not in val_group_keys
+                and len(group_to_samples[group_key]) < len(train_samples)
+            ),
+            None,
+        )
+        if movable_group is None:
+            msg = "Unable to build a non-empty validation split from grouped samples."
+            raise ValueError(msg)
+        moved_samples = group_to_samples[movable_group]
+        val_samples.extend(moved_samples)
+        train_samples = [
+            sample for sample in train_samples if sample not in moved_samples
+        ]
 
     if not train_samples or not val_samples:
         msg = "Unable to build a non-empty train/validation split from the dataset."
@@ -120,6 +179,8 @@ def load_rd_tensor(
     npz_path: Path,
     target_frames: int,
     normalize: bool,
+    use_active_window: bool,
+    active_window_context_frames: int,
 ) -> np.ndarray:
     """Load one `rd` tensor and align its frame count to `target_frames`."""
     if target_frames <= 0:
@@ -131,6 +192,12 @@ def load_rd_tensor(
             msg = f"Missing 'rd' in npz: {npz_path}"
             raise KeyError(msg)
         rd = np.asarray(npz["rd"], dtype=np.float32)
+        if use_active_window:
+            rd = _crop_to_active_window(
+                rd=rd,
+                npz=npz,
+                active_window_context_frames=active_window_context_frames,
+            )
 
     if rd.ndim != 3:
         msg = f"Expected an RD tensor shaped (T, R, D), got {rd.shape}"
@@ -158,9 +225,17 @@ def _load_training_sample(
         label = _resolve_label(npz=npz, label_mode=label_mode)
         if label is None or label not in allowed_labels:
             return None
-        subject_name = _read_optional_scalar_str(npz=npz, key="subject_name") or "unknown"
+        subject_name = (
+            _read_optional_scalar_str(npz=npz, key="subject_name") or "unknown"
+        )
+        session_id = _read_optional_scalar_str(npz=npz, key="session_id") or "unknown"
 
-    return TrainingSample(path=npz_path, label=label, subject_name=subject_name)
+    return TrainingSample(
+        path=npz_path,
+        label=label,
+        subject_name=subject_name,
+        session_id=session_id,
+    )
 
 
 def _resolve_label(
@@ -220,3 +295,124 @@ def _read_optional_scalar_str(*, npz: np.lib.npyio.NpzFile, key: str) -> str | N
         stripped = scalar.strip()
         return stripped if stripped else None
     return None
+
+
+def _resolve_group_key(*, sample: TrainingSample, group_by: SplitGroupBy) -> str:
+    """Resolve the split group key for one training sample."""
+    if group_by == "subject":
+        return sample.subject_name
+    if group_by == "session":
+        return sample.session_id
+
+    msg = f"Unsupported group_by: {group_by!r}"
+    raise ValueError(msg)
+
+
+def _rebalance_group_split_for_label_coverage(
+    *,
+    samples: tuple[TrainingSample, ...],
+    group_to_samples: dict[str, list[TrainingSample]],
+    val_group_keys: set[str],
+    rng: random.Random,
+) -> set[str]:
+    """Ensure each label appears in both splits whenever multiple groups exist."""
+    labels = sorted({sample.label for sample in samples})
+    for label in labels:
+        groups_with_label = [
+            group_key
+            for group_key, grouped_samples in group_to_samples.items()
+            if any(sample.label == label for sample in grouped_samples)
+        ]
+        if len(groups_with_label) <= 1:
+            continue
+
+        val_groups = [
+            group_key for group_key in groups_with_label if group_key in val_group_keys
+        ]
+        train_groups = [
+            group_key
+            for group_key in groups_with_label
+            if group_key not in val_group_keys
+        ]
+        if not train_groups:
+            movable = sorted(
+                val_groups,
+                key=lambda group_key: len(group_to_samples[group_key]),
+            )
+            if movable:
+                val_group_keys.remove(movable[0])
+        elif not val_groups:
+            movable = sorted(
+                train_groups,
+                key=lambda group_key: len(group_to_samples[group_key]),
+            )
+            if movable:
+                val_group_keys.add(movable[0])
+
+    # Add small stochasticity so repeated runs with same seed can still be deterministic.
+    normalized = list(val_group_keys)
+    rng.shuffle(normalized)
+    return set(normalized)
+
+
+def _crop_to_active_window(
+    *,
+    rd: np.ndarray,
+    npz: np.lib.npyio.NpzFile,
+    active_window_context_frames: int,
+) -> np.ndarray:
+    """Crop one RD tensor to the active window before temporal resampling."""
+    if rd.shape[0] <= 1:
+        return rd
+
+    capture_window_s = _read_optional_scalar_f32_pair(npz=npz, key="capture_window_s")
+    if capture_window_s is None:
+        return rd
+
+    marked_window_s = _read_optional_scalar_f32_pair(npz=npz, key="marked_window_s")
+    target_window_s = _read_optional_scalar_f32_pair(npz=npz, key="target_window_s")
+    active_window_s = marked_window_s or target_window_s
+    if active_window_s is None:
+        return rd
+
+    capture_start, capture_end = capture_window_s
+    active_start, active_end = active_window_s
+    if (
+        capture_end <= capture_start
+        or active_end <= active_start
+        or active_end <= capture_start
+        or active_start >= capture_end
+    ):
+        return rd
+
+    frame_period_s = (capture_end - capture_start) / float(rd.shape[0])
+    context_s = max(0, active_window_context_frames) * frame_period_s
+    cropped_start_s = max(capture_start, active_start - context_s)
+    cropped_end_s = min(capture_end, active_end + context_s)
+    if cropped_end_s <= cropped_start_s:
+        return rd
+
+    start_index = int(np.floor((cropped_start_s - capture_start) / frame_period_s))
+    end_index_exclusive = int(np.ceil((cropped_end_s - capture_start) / frame_period_s))
+    start_index = max(0, min(start_index, rd.shape[0] - 1))
+    end_index_exclusive = max(start_index + 1, min(end_index_exclusive, rd.shape[0]))
+    return rd[start_index:end_index_exclusive, :, :]
+
+
+def _read_optional_scalar_f32_pair(
+    *,
+    npz: np.lib.npyio.NpzFile,
+    key: str,
+) -> tuple[float, float] | None:
+    """Read one optional float pair from a NumPy archive, ignoring NaN fields."""
+    if key not in npz:
+        return None
+
+    raw_value = np.asarray(npz[key], dtype=np.float32).reshape(-1)
+    if raw_value.size < 2:
+        return None
+    start = float(raw_value[0])
+    end = float(raw_value[1])
+    if not np.isfinite(start) or not np.isfinite(end):
+        return None
+    return (start, end)
