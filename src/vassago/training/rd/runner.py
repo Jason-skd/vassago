@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
+import random
 from dataclasses import asdict
 from dataclasses import dataclass
 from datetime import UTC
 from datetime import datetime
-import json
 from pathlib import Path
-import random
+from typing import TYPE_CHECKING
 
 import numpy as np
 from rich.console import Console
@@ -18,7 +19,6 @@ from rich.progress import TaskProgressColumn
 from rich.progress import TextColumn
 from rich.progress import TimeElapsedColumn
 
-from typing import TYPE_CHECKING
 from vassago.training.rd.config import TrainingRunConfig
 from vassago.training.rd.dataset import TrainingSample
 from vassago.training.rd.dataset import discover_training_samples
@@ -288,7 +288,7 @@ class _RdTorchDataset(_TorchDataset):
     def __len__(self) -> int:
         return len(self._samples)
 
-    def __getitem__(self, index: int) -> tuple["np.ndarray", "np.ndarray"]:
+    def __getitem__(self, index: int) -> tuple[np.ndarray, np.ndarray]:
         sample = self._samples[index]
         rd_tensor = load_rd_tensor(
             npz_path=sample.path,

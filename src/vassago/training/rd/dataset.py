@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import random
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -105,7 +105,7 @@ def split_dataset(
         for label, total_count in label_totals.items()
         if total_count > 1
     }
-    label_val_counts = {label: 0 for label in label_totals}
+    label_val_counts = dict.fromkeys(label_totals, 0)
 
     val_group_keys: set[str] = set()
     for label, target_count in label_targets.items():
@@ -290,10 +290,10 @@ def _read_optional_scalar_str(*, npz: np.lib.npyio.NpzFile, key: str) -> str | N
     scalar = raw_value.item()
     if isinstance(scalar, bytes):
         decoded = scalar.decode("utf-8", errors="ignore").strip()
-        return decoded if decoded else None
+        return decoded or None
     if isinstance(scalar, str):
         stripped = scalar.strip()
-        return stripped if stripped else None
+        return stripped or None
     return None
 
 
